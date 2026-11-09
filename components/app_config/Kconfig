@@ -1,0 +1,203 @@
+menu "WeMos R32 application"
+
+    config APP_DEVICE_NAME
+        string "Device name"
+        default "WeMosR32"
+        help
+            Human-readable device name returned by the status API.
+
+    config APP_WIFI_AP_SSID
+        string "SoftAP SSID"
+        default "WeMosR32"
+        help
+            SSID broadcast by the device.
+
+    config APP_WIFI_AP_PASSWORD
+        string "SoftAP password"
+        default "wemosr32"
+        help
+            WPA2 password for the SoftAP. Use at least 8 characters.
+            An empty value creates an open network.
+
+    config APP_WIFI_AP_CHANNEL
+        int "SoftAP channel"
+        range 1 13
+        default 1
+
+    config APP_WIFI_STA_ENABLED
+        bool "Enable station mode"
+        default n
+        help
+            Keep the device connected to an existing Wi-Fi network.
+            SoftAP remains enabled so local configuration is always available.
+
+    config APP_WIFI_STA_SSID
+        string "Station SSID"
+        default ""
+        depends on APP_WIFI_STA_ENABLED
+
+    config APP_WIFI_STA_PASSWORD
+        string "Station password"
+        default ""
+        depends on APP_WIFI_STA_ENABLED
+        help
+            Leave empty for an open network.
+
+    config APP_HTTP_SERVER_ENABLED
+        bool "Enable HTTP status API"
+        default y
+        help
+            Starts a small HTTP server on both the SoftAP and station interfaces.
+
+    config APP_WELLNESS_ENABLED
+        bool "Enable PIR, SHT30, OLED and sedentary reminder"
+        default y
+        help
+            Starts the wellness monitor task, SSD1306 status display and
+            sedentary reminder. Sensor failures are logged but do not stop
+            Wi-Fi or the HTTP status server.
+
+    config APP_PIR_GPIO
+        int "PIR OUT GPIO"
+        range 0 39
+        default 27
+        depends on APP_WELLNESS_ENABLED
+        help
+            GPIO connected to the PIR module digital output. The default is
+            safe for ESP32-WROOM boards; avoid GPIO6-11 used by flash.
+
+    config APP_SHT30_UART_PORT
+        int "SHT30 UART port"
+        range 1 2
+        default 2
+        depends on APP_WELLNESS_ENABLED
+        help
+            UART peripheral used by the SmartMCU serial SHT30 module.
+            UART0 is reserved for the ESP-IDF console.
+
+    config APP_SHT30_UART_TX_GPIO
+        int "SHT30 UART TX GPIO"
+        range 0 39
+        default 17
+        depends on APP_WELLNESS_ENABLED
+        help
+            ESP32 TX pin connected to the SHT30 module RXD pin.
+
+    config APP_SHT30_UART_RX_GPIO
+        int "SHT30 UART RX GPIO"
+        range 0 39
+        default 16
+        depends on APP_WELLNESS_ENABLED
+        help
+            ESP32 RX pin connected to the SHT30 module TXD pin.
+
+    config APP_OLED_I2C_PORT
+        int "OLED I2C port"
+        range 0 1
+        default 0
+        depends on APP_WELLNESS_ENABLED
+
+    config APP_OLED_I2C_SDA_GPIO
+        int "OLED I2C SDA GPIO"
+        range 0 39
+        default 21
+        depends on APP_WELLNESS_ENABLED
+
+    config APP_OLED_I2C_SCL_GPIO
+        int "OLED I2C SCL GPIO"
+        range 0 39
+        default 22
+        depends on APP_WELLNESS_ENABLED
+
+    config APP_OLED_I2C_FREQ_HZ
+        int "OLED I2C clock frequency"
+        range 100000 400000
+        default 100000
+        depends on APP_WELLNESS_ENABLED
+
+    config APP_BUZZER_ENABLED
+        bool "Enable active buzzer feedback"
+        default y
+        depends on APP_WELLNESS_ENABLED
+        help
+            Drives the active-high buzzer service for sedentary and water
+            reminders. Disable this when no buzzer is connected; the OLED
+            and HTTP status still show reminder state.
+
+    config APP_BUZZER_GPIO
+        int "Active buzzer GPIO"
+        range 0 39
+        default 25
+        depends on APP_BUZZER_ENABLED
+
+    config APP_VIBRATION_ENABLED
+        bool "Enable vibration motor feedback"
+        default y
+        depends on APP_WELLNESS_ENABLED
+        help
+            Drives the vibration service through a three-wire motor module
+            with an active-high IN input. Do not connect a bare two-wire
+            motor directly to an ESP32 GPIO; use a transistor or MOSFET
+            driver with a flyback diode.
+
+    config APP_VIBRATION_GPIO
+        int "Vibration motor IN GPIO"
+        range 0 39
+        default 26
+        depends on APP_VIBRATION_ENABLED
+        help
+            GPIO connected to the motor module IN input. GPIO26 is used by
+            default and is independent from the buzzer on GPIO25.
+
+    config APP_RGB_LED_ENABLED
+        bool "Enable RGB indicator LED"
+        default y
+        depends on APP_WELLNESS_ENABLED
+        help
+            Drives a common-cathode RGB LED through three LEDC PWM channels.
+            The R, G and B inputs are active-high. Use series resistors when
+            the LED module does not already provide current limiting.
+
+    config APP_RGB_LED_RED_GPIO
+        int "RGB red GPIO"
+        range 0 39
+        default 32
+        depends on APP_RGB_LED_ENABLED
+
+    config APP_RGB_LED_GREEN_GPIO
+        int "RGB green GPIO"
+        range 0 39
+        default 33
+        depends on APP_RGB_LED_ENABLED
+
+    config APP_RGB_LED_BLUE_GPIO
+        int "RGB blue GPIO"
+        range 0 39
+        default 18
+        depends on APP_RGB_LED_ENABLED
+
+    config APP_SEDENTARY_INITIAL_MINUTES
+        int "First sedentary alert after minutes"
+        range 1 240
+        default 45
+        depends on APP_WELLNESS_ENABLED
+
+    config APP_SEDENTARY_ESCALATION_MINUTES
+        int "Repeat alert interval while seated"
+        range 1 60
+        default 5
+        depends on APP_WELLNESS_ENABLED
+
+    config APP_SEDENTARY_BREAK_MINUTES
+        int "Required break duration in minutes"
+        range 1 30
+        default 3
+        depends on APP_WELLNESS_ENABLED
+
+    config APP_SEDENTARY_ABSENCE_SECONDS
+        int "No-motion interval before break candidate"
+        range 5 300
+        default 30
+        depends on APP_WELLNESS_ENABLED
+
+endmenu

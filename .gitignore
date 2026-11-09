@@ -1,0 +1,28 @@
+# ESP-IDF build output and local configuration
+build/
+build_host_tests/
+.cache/
+test-results/
+sdkconfig
+sdkconfig.old
+wifi.ini
+
+# Generated binaries and reports
+*.bin
+*.elf
+*.map
+*.size
+__pycache__/
+*.py[cod]
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+*.tmp
+Thumbs.db
+
+# Local AI tooling (skills are restored from skills-lock.json)
+.agents/
+.claude/
+agent/
