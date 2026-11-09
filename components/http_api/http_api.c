@@ -41,6 +41,10 @@ typedef struct {
     uint8_t page_mask;
 } web_settings_blob_t;
 
+_Static_assert(sizeof(web_settings_blob_t) <=
+                   CONFIG_SERVICE_BLOB_MAX_WEB_SETTINGS,
+               "web settings record exceeds its NVS storage contract");
+
 #define WEB_PAGE_ALL_MASK \
     ((uint8_t)((1u << (uint32_t)WEB_PAGE_COUNT) - 1u))
 

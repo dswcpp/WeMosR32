@@ -72,6 +72,13 @@ typedef struct {
     bool overflow;
 } weather_http_buffer_t;
 
+_Static_assert(sizeof(weather_settings_record_t) <=
+                   CONFIG_SERVICE_BLOB_MAX_WEATHER_SETTINGS,
+               "weather settings record exceeds its NVS storage contract");
+_Static_assert(sizeof(weather_cache_record_t) <=
+                   CONFIG_SERVICE_BLOB_MAX_WEATHER_CACHE,
+               "weather cache record exceeds its NVS storage contract");
+
 static bool s_initialized;
 static SemaphoreHandle_t s_lock;
 static TaskHandle_t s_task;
@@ -695,6 +702,7 @@ esp_err_t weather_service_set_settings(
     };
     char location[WEATHER_SERVICE_LOCATION_MAX_LEN + 1];
     bool invalidate_cache;
+    bool settings_changed;
     esp_err_t err;
 
     if (!s_initialized) {
@@ -718,6 +726,16 @@ esp_err_t weather_service_set_settings(
     next.longitude = settings->longitude;
 
     lock_state();
+    settings_changed =
+        s_settings.enabled != next.enabled ||
+        strcmp(s_settings.location, next.location) != 0 ||
+        s_settings.latitude != next.latitude ||
+        s_settings.longitude != next.longitude;
+    if (!settings_changed) {
+        unlock_state();
+        return ESP_OK;
+    }
+
     invalidate_cache =
         s_settings.latitude != next.latitude ||
         s_settings.longitude != next.longitude;

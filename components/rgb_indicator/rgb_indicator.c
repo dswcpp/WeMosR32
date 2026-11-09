@@ -33,6 +33,10 @@ typedef struct {
     uint8_t reserved;
 } rgb_persisted_config_t;
 
+_Static_assert(sizeof(rgb_persisted_config_t) <=
+                   CONFIG_SERVICE_BLOB_MAX_RGB_SETTINGS,
+               "RGB settings record exceeds its NVS storage contract");
+
 static const char *TAG = "rgb_indicator";
 static rgb_indicator_config_t s_config;
 static rgb_indicator_snapshot_t s_state;

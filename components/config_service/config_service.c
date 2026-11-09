@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 
@@ -14,17 +15,11 @@
 #define CONFIG_SERVICE_WIFI_RECORD_MAGIC 0x57494631u
 #define CONFIG_SERVICE_WIFI_RECORD_VERSION 1u
 
-#define CONFIG_SERVICE_BLOB_MAX_CARE_SETTINGS 96u
-#define CONFIG_SERVICE_BLOB_MAX_CARE_DAILY 64u
-#define CONFIG_SERVICE_BLOB_MAX_RGB_SETTINGS 16u
-#define CONFIG_SERVICE_BLOB_MAX_WEATHER_SETTINGS 96u
-#define CONFIG_SERVICE_BLOB_MAX_WEATHER_CACHE 192u
-#define CONFIG_SERVICE_BLOB_MAX_WEB_SETTINGS 16u
-
 static const char *TAG = "config_service";
 static bool s_initialized;
 static bool s_recovery_required;
 static esp_err_t s_last_error;
+static portMUX_TYPE s_status_mux = portMUX_INITIALIZER_UNLOCKED;
 
 typedef struct {
     const char *namespace_name;
@@ -75,7 +70,9 @@ static const config_service_blob_spec_t s_blob_specs[] = {
 
 static void record_result(esp_err_t err)
 {
+    taskENTER_CRITICAL(&s_status_mux);
     s_last_error = err;
+    taskEXIT_CRITICAL(&s_status_mux);
 }
 
 static const config_service_blob_spec_t *get_blob_spec(
@@ -164,9 +161,11 @@ esp_err_t config_service_get_status(config_service_status_t *status)
         return ESP_ERR_INVALID_ARG;
     }
 
+    taskENTER_CRITICAL(&s_status_mux);
     status->initialized = s_initialized;
     status->recovery_required = s_recovery_required;
     status->last_error = s_last_error;
+    taskEXIT_CRITICAL(&s_status_mux);
     return ESP_OK;
 }
 

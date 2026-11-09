@@ -74,6 +74,13 @@ typedef struct {
     uint32_t water_ml;
 } care_daily_blob_t;
 
+_Static_assert(sizeof(care_settings_blob_t) <=
+                   CONFIG_SERVICE_BLOB_MAX_CARE_SETTINGS,
+               "care settings blob exceeds its NVS storage contract");
+_Static_assert(sizeof(care_daily_blob_t) <=
+                   CONFIG_SERVICE_BLOB_MAX_CARE_DAILY,
+               "care daily blob exceeds its NVS storage contract");
+
 static SemaphoreHandle_t s_lock;
 static bool s_initialized;
 static care_settings_t s_settings;
@@ -644,7 +651,10 @@ esp_err_t care_guidance_set_settings(const care_settings_t *settings)
 {
     esp_err_t err;
 
-    if (!s_initialized || settings == NULL || !valid_settings(settings)) {
+    if (!s_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (settings == NULL || !valid_settings(settings)) {
         return ESP_ERR_INVALID_ARG;
     }
     if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(100)) != pdTRUE) {
@@ -667,8 +677,10 @@ esp_err_t care_guidance_add_water(int32_t delta_ml)
     care_daily_blob_t next_daily;
     int32_t next_water_ml;
 
-    if (!s_initialized || delta_ml == 0 || delta_ml < -1000 ||
-        delta_ml > 1000) {
+    if (!s_initialized) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (delta_ml == 0 || delta_ml < -1000 || delta_ml > 1000) {
         return ESP_ERR_INVALID_ARG;
     }
     if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(100)) != pdTRUE) {
@@ -684,6 +696,11 @@ esp_err_t care_guidance_add_water(int32_t delta_ml)
         next_water_ml = (int32_t)CARE_WATER_MAX_TOTAL_ML;
     }
     next_daily.water_ml = (uint32_t)next_water_ml;
+    if (next_daily.water_ml == s_daily.water_ml) {
+        xSemaphoreGive(s_lock);
+        return ESP_OK;
+    }
+
     err = config_service_save_blob(CONFIG_SERVICE_ITEM_CARE_DAILY,
                                    &next_daily, sizeof(next_daily));
     if (err == ESP_OK) {
