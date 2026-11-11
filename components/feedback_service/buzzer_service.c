@@ -12,39 +12,43 @@
 
 static const char *TAG = "buzzer";
 
-static const feedback_pulse_t WATER_PULSES[] = {
-    {120u, 200u},
+static const feedback_pulse_t NAVIGATE_PULSES[] = {
+    {30u, 0u},
+};
+static const feedback_pulse_t REFRESH_SUCCESS_PULSES[] = {
+    {60u, 80u},
+    {60u, 0u},
+};
+static const feedback_pulse_t REFRESH_FAILED_PULSES[] = {
+    {100u, 90u},
+    {100u, 90u},
+    {100u, 0u},
+};
+static const feedback_pulse_t PRICE_ALERT_PULSES[] = {
+    {120u, 100u},
     {120u, 0u},
-};
-static const feedback_pulse_t SEDENTARY_PULSES[] = {
-    {160u, 220u},
-    {160u, 0u},
-};
-static const feedback_pulse_t ESCALATED_PULSES[] = {
-    {160u, 180u},
-    {160u, 180u},
-    {160u, 0u},
-};
-static const feedback_pulse_t CONFIRM_PULSES[] = {
-    {80u, 0u},
 };
 
 static const feedback_pattern_t s_patterns[] = {
     [BUZZER_PATTERN_NONE] = {NULL, 0u},
-    [BUZZER_PATTERN_WATER_REMINDER] = {
-        WATER_PULSES, (uint8_t)(sizeof(WATER_PULSES) / sizeof(WATER_PULSES[0]))
+    [BUZZER_PATTERN_NAVIGATE] = {
+        NAVIGATE_PULSES,
+        (uint8_t)(sizeof(NAVIGATE_PULSES) / sizeof(NAVIGATE_PULSES[0]))
     },
-    [BUZZER_PATTERN_SEDENTARY_ALERT] = {
-        SEDENTARY_PULSES,
-        (uint8_t)(sizeof(SEDENTARY_PULSES) / sizeof(SEDENTARY_PULSES[0]))
+    [BUZZER_PATTERN_REFRESH_SUCCESS] = {
+        REFRESH_SUCCESS_PULSES,
+        (uint8_t)(sizeof(REFRESH_SUCCESS_PULSES) /
+                  sizeof(REFRESH_SUCCESS_PULSES[0]))
     },
-    [BUZZER_PATTERN_SEDENTARY_ESCALATED] = {
-        ESCALATED_PULSES,
-        (uint8_t)(sizeof(ESCALATED_PULSES) / sizeof(ESCALATED_PULSES[0]))
+    [BUZZER_PATTERN_REFRESH_FAILED] = {
+        REFRESH_FAILED_PULSES,
+        (uint8_t)(sizeof(REFRESH_FAILED_PULSES) /
+                  sizeof(REFRESH_FAILED_PULSES[0]))
     },
-    [BUZZER_PATTERN_CONFIRM] = {
-        CONFIRM_PULSES, (uint8_t)(sizeof(CONFIRM_PULSES) /
-                                  sizeof(CONFIRM_PULSES[0]))
+    [BUZZER_PATTERN_PRICE_ALERT] = {
+        PRICE_ALERT_PULSES,
+        (uint8_t)(sizeof(PRICE_ALERT_PULSES) /
+                  sizeof(PRICE_ALERT_PULSES[0]))
     },
 };
 
@@ -86,7 +90,7 @@ static void buzzer_timer_callback(void *argument)
 static bool pattern_valid(buzzer_pattern_t pattern)
 {
     return pattern >= BUZZER_PATTERN_NONE &&
-           pattern <= BUZZER_PATTERN_CONFIRM;
+           pattern <= BUZZER_PATTERN_PRICE_ALERT;
 }
 
 esp_err_t buzzer_service_start(const buzzer_service_config_t *config)

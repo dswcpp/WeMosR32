@@ -3,49 +3,34 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "config_service.h"
+#include "app_events.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #define RGB_INDICATOR_TASK_STACK 3072u
 #define RGB_INDICATOR_TASK_PRIORITY 3u
-#define RGB_INDICATOR_TICK_MS 40u
+#define RGB_INDICATOR_TICK_MS 20u
 #define RGB_INDICATOR_LEDC_MODE LEDC_LOW_SPEED_MODE
 #define RGB_INDICATOR_LEDC_TIMER LEDC_TIMER_0
 #define RGB_INDICATOR_LEDC_RESOLUTION LEDC_TIMER_10_BIT
 #define RGB_INDICATOR_LEDC_FREQUENCY_HZ 5000u
 #define RGB_INDICATOR_LEDC_MAX_DUTY 1023u
-#define RGB_CONFIG_MAGIC 0x52474231u
-#define RGB_CONFIG_VERSION 1u
-
-typedef struct {
-    uint32_t magic;
-    uint16_t version;
-    uint8_t mode;
-    uint8_t red;
-    uint8_t green;
-    uint8_t blue;
-    uint8_t brightness;
-    uint8_t reserved;
-} rgb_persisted_config_t;
-
-_Static_assert(sizeof(rgb_persisted_config_t) <=
-                   CONFIG_SERVICE_BLOB_MAX_RGB_SETTINGS,
-               "RGB settings record exceeds its NVS storage contract");
 
 static const char *TAG = "rgb_indicator";
 static rgb_indicator_config_t s_config;
-static rgb_indicator_snapshot_t s_state;
+static rgb_indicator_context_t s_context;
+static rgb_indicator_event_state_t s_events;
+static rgb_indicator_resolved_t s_resolved;
 static portMUX_TYPE s_state_mux = portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t s_task;
 static bool s_initialized;
 static bool s_started;
 static int s_channel_duty[3] = {-1, -1, -1};
-static uint8_t s_rainbow_hue;
 
 static const ledc_channel_t s_channels[] = {
     LEDC_CHANNEL_0,
@@ -53,10 +38,9 @@ static const ledc_channel_t s_channels[] = {
     LEDC_CHANNEL_2,
 };
 
-static bool is_valid_mode(rgb_indicator_mode_t mode)
+static uint32_t now_ms(void)
 {
-    return mode >= RGB_INDICATOR_MODE_OFF &&
-           mode <= RGB_INDICATOR_MODE_RAINBOW;
+    return (uint32_t)(esp_timer_get_time() / 1000);
 }
 
 static bool is_valid_gpio(int gpio)
@@ -67,7 +51,8 @@ static bool is_valid_gpio(int gpio)
 static esp_err_t write_channel(size_t index, uint8_t value,
                                uint8_t brightness, uint8_t pulse)
 {
-    uint32_t scaled = (uint32_t)value * brightness * pulse / 10000u;
+    uint32_t scaled =
+        (uint32_t)value * brightness * pulse / 10000u;
     uint32_t gamma;
     uint32_t duty;
 
@@ -91,139 +76,95 @@ static esp_err_t write_channel(size_t index, uint8_t value,
     return ESP_OK;
 }
 
-static esp_err_t write_rgb(uint8_t red, uint8_t green, uint8_t blue,
-                           uint8_t brightness, uint8_t pulse)
+static esp_err_t write_rgb(const rgb_indicator_resolved_t *resolved)
 {
-    ESP_RETURN_ON_ERROR(write_channel(0, red, brightness, pulse), TAG,
-                        "failed to update red output");
-    ESP_RETURN_ON_ERROR(write_channel(1, green, brightness, pulse), TAG,
-                        "failed to update green output");
-    return write_channel(2, blue, brightness, pulse);
+    ESP_RETURN_ON_ERROR(
+        write_channel(0, resolved->red, resolved->brightness,
+                      resolved->pulse_percent),
+        TAG, "failed to update red output");
+    ESP_RETURN_ON_ERROR(
+        write_channel(1, resolved->green, resolved->brightness,
+                      resolved->pulse_percent),
+        TAG, "failed to update green output");
+    return write_channel(2, resolved->blue, resolved->brightness,
+                         resolved->pulse_percent);
 }
 
-static uint8_t triangle_pulse(uint32_t now_ms, uint32_t period_ms,
-                              uint8_t minimum)
+static void on_app_event(const app_event_t *event, void *context)
 {
-    uint32_t phase;
-    uint32_t wave;
+    rgb_indicator_event_t indicator_event = RGB_INDICATOR_EVENT_NONE;
 
-    if (period_ms == 0u) {
-        return 100u;
+    (void)context;
+    if (event == NULL || !s_started) {
+        return;
     }
-    phase = now_ms % period_ms;
-    wave = phase <= period_ms / 2u
-               ? phase * 2u
-               : (period_ms - phase) * 2u;
-    wave = wave * 100u / period_ms;
-    return (uint8_t)(minimum + wave * (100u - minimum) / 100u);
-}
 
-static void hsv_to_rgb(uint8_t hue, uint8_t *red, uint8_t *green,
-                       uint8_t *blue)
-{
-    const uint8_t region = hue / 43u;
-    const uint8_t remainder = (uint8_t)((hue - region * 43u) * 6u);
-    const uint8_t p = 0u;
-    const uint8_t q = (uint8_t)(255u - remainder);
-    const uint8_t t = remainder;
-
-    switch (region) {
-    case 0:
-        *red = 255u;
-        *green = t;
-        *blue = p;
+    switch (event->type) {
+    case APP_EVENT_WIFI_STATION_CONNECTING:
+        rgb_indicator_set_network_state(RGB_INDICATOR_NETWORK_CONNECTING);
         break;
-    case 1:
-        *red = q;
-        *green = 255u;
-        *blue = p;
+    case APP_EVENT_WIFI_STATION_CONNECTED:
+        rgb_indicator_set_network_state(RGB_INDICATOR_NETWORK_CONNECTED);
+        indicator_event = RGB_INDICATOR_EVENT_WIFI_CONNECTED;
         break;
-    case 2:
-        *red = p;
-        *green = 255u;
-        *blue = t;
+    case APP_EVENT_WIFI_STATION_DISCONNECTED:
+        rgb_indicator_set_network_state(RGB_INDICATOR_NETWORK_DISCONNECTED);
+        indicator_event = RGB_INDICATOR_EVENT_WIFI_DISCONNECTED;
         break;
-    case 3:
-        *red = p;
-        *green = q;
-        *blue = 255u;
+    case APP_EVENT_WIFI_CLIENT_CONNECTED:
+        indicator_event = RGB_INDICATOR_EVENT_CLIENT_CONNECTED;
         break;
-    case 4:
-        *red = t;
-        *green = p;
-        *blue = 255u;
+    case APP_EVENT_WIFI_CLIENT_DISCONNECTED:
+        indicator_event = RGB_INDICATOR_EVENT_CLIENT_DISCONNECTED;
+        break;
+    case APP_EVENT_STOCK_REFRESH_STARTED:
+        indicator_event = RGB_INDICATOR_EVENT_REFRESH_STARTED;
+        break;
+    case APP_EVENT_STOCK_REFRESHED:
+        indicator_event = RGB_INDICATOR_EVENT_REFRESH_SUCCEEDED;
+        break;
+    case APP_EVENT_STOCK_REFRESH_FAILED:
+        indicator_event = RGB_INDICATOR_EVENT_REFRESH_FAILED;
+        break;
+    case APP_EVENT_STOCK_PRICE_ALERT:
+        if (event->detail < 0) {
+            indicator_event = RGB_INDICATOR_EVENT_PRICE_ALERT_DOWN;
+        } else if (event->detail > 0) {
+            indicator_event = RGB_INDICATOR_EVENT_PRICE_ALERT_UP;
+        }
+        break;
+    case APP_EVENT_CONFIG_UPDATED:
+        indicator_event = RGB_INDICATOR_EVENT_CONFIG_SAVED;
+        break;
+    case APP_EVENT_CONFIG_SAVE_FAILED:
+        indicator_event = RGB_INDICATOR_EVENT_CONFIG_SAVE_FAILED;
+        break;
+    case APP_EVENT_STOCK_VIEW_CHANGED:
+        indicator_event = RGB_INDICATOR_EVENT_NAVIGATE;
+        break;
+    case APP_EVENT_SYSTEM_DEGRADED:
+        indicator_event = RGB_INDICATOR_EVENT_SYSTEM_DEGRADED;
         break;
     default:
-        *red = 255u;
-        *green = p;
-        *blue = q;
         break;
+    }
+
+    if (indicator_event != RGB_INDICATOR_EVENT_NONE) {
+        (void)rgb_indicator_notify(indicator_event);
     }
 }
 
 static void render_state(void)
 {
-    rgb_indicator_snapshot_t state;
-    uint32_t now_ms = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
-    uint8_t red = 0u;
-    uint8_t green = 0u;
-    uint8_t blue = 0u;
-    uint8_t brightness = 0u;
-    uint8_t pulse = 100u;
+    rgb_indicator_resolved_t resolved;
+    esp_err_t err;
 
     taskENTER_CRITICAL(&s_state_mux);
-    state = s_state;
+    resolved = rgb_indicator_resolve(&s_context, &s_events, now_ms());
+    s_resolved = resolved;
     taskEXIT_CRITICAL(&s_state_mux);
 
-    switch (state.mode) {
-    case RGB_INDICATOR_MODE_OFF:
-        break;
-    case RGB_INDICATOR_MODE_SOLID:
-        red = state.red;
-        green = state.green;
-        blue = state.blue;
-        brightness = state.brightness;
-        break;
-    case RGB_INDICATOR_MODE_RAINBOW:
-        hsv_to_rgb(s_rainbow_hue, &red, &green, &blue);
-        s_rainbow_hue = (uint8_t)(s_rainbow_hue + 2u);
-        brightness = state.brightness;
-        break;
-    case RGB_INDICATOR_MODE_AUTO:
-    default:
-        if (state.wellness_alert) {
-            red = 255u;
-            green = 28u;
-            brightness = 85u;
-            pulse = ((now_ms / 260u) % 2u) == 0u ? 100u : 0u;
-        } else if (state.water_due) {
-            red = 0u;
-            green = 150u;
-            blue = 255u;
-            brightness = 55u;
-            pulse = triangle_pulse(now_ms, 900u, 12u);
-        } else if (state.wellness_active && state.wellness_present) {
-            red = 0u;
-            green = 225u;
-            blue = 255u;
-            brightness = 38u;
-            pulse = triangle_pulse(now_ms, 3000u, 22u);
-        } else if (state.wellness_active) {
-            red = 0u;
-            green = 255u;
-            blue = 96u;
-            brightness = 50u;
-            pulse = triangle_pulse(now_ms, 1800u, 25u);
-        } else {
-            red = 72u;
-            green = 24u;
-            blue = 210u;
-            brightness = 12u;
-        }
-        break;
-    }
-
-    esp_err_t err = write_rgb(red, green, blue, brightness, pulse);
+    err = write_rgb(&resolved);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "RGB output update failed: %s", esp_err_to_name(err));
     }
@@ -241,40 +182,10 @@ static void rgb_indicator_task(void *argument)
     }
 }
 
-static void load_persisted_state(void)
-{
-    rgb_persisted_config_t persisted = {0};
-    size_t size = sizeof(persisted);
-    bool found = false;
-    esp_err_t err;
-
-    err = config_service_load_blob(CONFIG_SERVICE_ITEM_RGB_SETTINGS,
-                                   &persisted, &size, &found);
-    if (err != ESP_OK || !found || size != sizeof(persisted) ||
-        persisted.magic != RGB_CONFIG_MAGIC ||
-        persisted.version != RGB_CONFIG_VERSION ||
-        !is_valid_mode((rgb_indicator_mode_t)persisted.mode) ||
-        persisted.brightness > 100u) {
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "saved RGB mode unavailable: %s",
-                     esp_err_to_name(err));
-        }
-        return;
-    }
-
-    s_state.mode = (rgb_indicator_mode_t)persisted.mode;
-    s_state.red = persisted.red;
-    s_state.green = persisted.green;
-    s_state.blue = persisted.blue;
-    s_state.brightness = persisted.brightness;
-    ESP_LOGI(TAG, "restored RGB mode %s",
-             rgb_indicator_mode_name(s_state.mode));
-}
-
 static void stop_outputs(void)
 {
-    for (size_t index = 0; index < sizeof(s_channels) / sizeof(s_channels[0]);
-         index++) {
+    for (size_t index = 0;
+         index < sizeof(s_channels) / sizeof(s_channels[0]); index++) {
         (void)ledc_stop(RGB_INDICATOR_LEDC_MODE, s_channels[index], 0);
         s_channel_duty[index] = -1;
     }
@@ -307,14 +218,17 @@ esp_err_t rgb_indicator_init(const rgb_indicator_config_t *config)
     }
 
     s_config = *config;
-    memset(&s_state, 0, sizeof(s_state));
-    s_state.enabled = true;
-    s_state.mode = RGB_INDICATOR_MODE_AUTO;
-    s_state.red = 0u;
-    s_state.green = 229u;
-    s_state.blue = 255u;
-    s_state.brightness = 45u;
-    load_persisted_state();
+    s_context = (rgb_indicator_context_t){
+        .system = RGB_INDICATOR_SYSTEM_BOOTING,
+        .network = RGB_INDICATOR_NETWORK_UNKNOWN,
+        .stock = RGB_INDICATOR_STOCK_UNKNOWN,
+    };
+    memset(&s_events, 0, sizeof(s_events));
+    memset(&s_resolved, 0, sizeof(s_resolved));
+    for (size_t index = 0;
+         index < sizeof(s_channels) / sizeof(s_channels[0]); index++) {
+        s_channel_duty[index] = -1;
+    }
 
     err = ledc_timer_config(&timer_config);
     if (err != ESP_OK) {
@@ -327,8 +241,8 @@ esp_err_t rgb_indicator_init(const rgb_indicator_config_t *config)
         s_config.green_gpio,
         s_config.blue_gpio,
     };
-    for (size_t index = 0; index < sizeof(s_channels) / sizeof(s_channels[0]);
-         index++) {
+    for (size_t index = 0;
+         index < sizeof(s_channels) / sizeof(s_channels[0]); index++) {
         ledc_channel_config_t channel_config = {
             .gpio_num = configured_gpios[index],
             .speed_mode = RGB_INDICATOR_LEDC_MODE,
@@ -351,100 +265,105 @@ esp_err_t rgb_indicator_init(const rgb_indicator_config_t *config)
             return err;
         }
     }
+
+    err = app_events_subscribe(on_app_event, NULL);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "event subscription unavailable; status polling remains "
+                 "active: %s",
+                 esp_err_to_name(err));
+    }
+
     s_initialized = true;
-    s_state.ready = true;
     if (xTaskCreate(rgb_indicator_task, "rgb_indicator",
                     RGB_INDICATOR_TASK_STACK, NULL,
                     RGB_INDICATOR_TASK_PRIORITY, &s_task) != pdPASS) {
-        s_state.ready = false;
         stop_outputs();
         s_initialized = false;
         return ESP_ERR_NO_MEM;
     }
 
     s_started = true;
-    ESP_LOGI(TAG, "rgb indicator ready on R=%d G=%d B=%d",
+    ESP_LOGI(TAG, "light-language service ready on R=%d G=%d B=%d",
              s_config.red_gpio, s_config.green_gpio, s_config.blue_gpio);
     return ESP_OK;
 }
 
-esp_err_t rgb_indicator_set_mode(rgb_indicator_mode_t mode, uint8_t red,
-                                 uint8_t green, uint8_t blue,
-                                 uint8_t brightness)
+void rgb_indicator_set_system_state(rgb_indicator_system_state_t state)
 {
-    rgb_persisted_config_t persisted = {
-        .magic = RGB_CONFIG_MAGIC,
-        .version = RGB_CONFIG_VERSION,
-        .mode = (uint8_t)mode,
-        .red = red,
-        .green = green,
-        .blue = blue,
-        .brightness = brightness,
-        .reserved = 0u,
-    };
-    esp_err_t err;
-
-    if (!is_valid_mode(mode) || brightness > 100u) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (!s_started || !s_state.ready) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    err = config_service_save_blob(CONFIG_SERVICE_ITEM_RGB_SETTINGS,
-                                   &persisted, sizeof(persisted));
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    taskENTER_CRITICAL(&s_state_mux);
-    s_state.mode = mode;
-    s_state.red = red;
-    s_state.green = green;
-    s_state.blue = blue;
-    s_state.brightness = brightness;
-    taskEXIT_CRITICAL(&s_state_mux);
-    return ESP_OK;
-}
-
-void rgb_indicator_set_wellness_state(bool active, bool present, bool alert,
-                                      bool water_due)
-{
-    if (!s_initialized) {
+    if (!s_started || state < RGB_INDICATOR_SYSTEM_BOOTING ||
+        state > RGB_INDICATOR_SYSTEM_DEGRADED) {
         return;
     }
 
     taskENTER_CRITICAL(&s_state_mux);
-    s_state.wellness_active = active;
-    s_state.wellness_present = present;
-    s_state.wellness_alert = alert;
-    s_state.water_due = water_due;
+    s_context.system = state;
     taskEXIT_CRITICAL(&s_state_mux);
 }
 
-bool rgb_indicator_get_snapshot(rgb_indicator_snapshot_t *snapshot)
+void rgb_indicator_set_network_state(rgb_indicator_network_state_t state)
 {
-    if (!s_initialized || snapshot == NULL) {
+    if (!s_started || state < RGB_INDICATOR_NETWORK_UNKNOWN ||
+        state > RGB_INDICATOR_NETWORK_CONNECTED) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&s_state_mux);
+    s_context.network = state;
+    taskEXIT_CRITICAL(&s_state_mux);
+}
+
+void rgb_indicator_set_stock_state(rgb_indicator_stock_state_t state,
+                                   bool refreshing,
+                                   bool symbols_configured)
+{
+    if (!s_started || state < RGB_INDICATOR_STOCK_UNKNOWN ||
+        state > RGB_INDICATOR_STOCK_ERROR) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&s_state_mux);
+    s_context.stock = state;
+    s_context.refreshing = refreshing;
+    s_context.symbols_configured = symbols_configured;
+    taskEXIT_CRITICAL(&s_state_mux);
+}
+
+bool rgb_indicator_notify(rgb_indicator_event_t event)
+{
+    bool accepted = false;
+
+    if (!s_started) {
         return false;
     }
 
     taskENTER_CRITICAL(&s_state_mux);
-    *snapshot = s_state;
+    accepted = rgb_indicator_trigger(&s_events, event, now_ms());
     taskEXIT_CRITICAL(&s_state_mux);
-    return true;
+    return accepted;
 }
 
-const char *rgb_indicator_mode_name(rgb_indicator_mode_t mode)
+bool rgb_indicator_get_snapshot(rgb_indicator_snapshot_t *snapshot)
 {
-    switch (mode) {
-    case RGB_INDICATOR_MODE_OFF:
-        return "off";
-    case RGB_INDICATOR_MODE_SOLID:
-        return "solid";
-    case RGB_INDICATOR_MODE_RAINBOW:
-        return "rainbow";
-    case RGB_INDICATOR_MODE_AUTO:
-    default:
-        return "auto";
+    if (snapshot == NULL) {
+        return false;
     }
+
+    taskENTER_CRITICAL(&s_state_mux);
+    *snapshot = (rgb_indicator_snapshot_t){
+        .enabled = s_initialized,
+        .ready = s_started,
+        .context = s_context,
+        .base_scene = s_resolved.base_scene,
+        .scene = s_resolved.scene,
+        .active_event = s_resolved.active_event,
+        .event_sequence = s_events.sequence,
+        .red = s_resolved.red,
+        .green = s_resolved.green,
+        .blue = s_resolved.blue,
+        .brightness = s_resolved.brightness,
+        .pulse_percent = s_resolved.pulse_percent,
+    };
+    taskEXIT_CRITICAL(&s_state_mux);
+    return s_started;
 }

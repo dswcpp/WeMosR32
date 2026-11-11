@@ -8,7 +8,7 @@ menu "WeMos R32 application"
 
     config APP_WIFI_AP_SSID
         string "SoftAP SSID"
-        default "WeMosR32"
+        default "StockMonitor"
         help
             SSID broadcast by the device.
 
@@ -49,80 +49,84 @@ menu "WeMos R32 application"
         help
             Starts a small HTTP server on both the SoftAP and station interfaces.
 
-    config APP_WELLNESS_ENABLED
-        bool "Enable PIR, SHT30, OLED and sedentary reminder"
+    config APP_BOARD_ENABLED
+        bool "Enable OLED, keys, buzzer, motor and indicators"
         default y
         help
-            Starts the wellness monitor task, SSD1306 status display and
-            sedentary reminder. Sensor failures are logged but do not stop
-            Wi-Fi or the HTTP status server.
-
-    config APP_PIR_GPIO
-        int "PIR OUT GPIO"
-        range 0 39
-        default 27
-        depends on APP_WELLNESS_ENABLED
-        help
-            GPIO connected to the PIR module digital output. The default is
-            safe for ESP32-WROOM boards; avoid GPIO6-11 used by flash.
-
-    config APP_SHT30_UART_PORT
-        int "SHT30 UART port"
-        range 1 2
-        default 2
-        depends on APP_WELLNESS_ENABLED
-        help
-            UART peripheral used by the SmartMCU serial SHT30 module.
-            UART0 is reserved for the ESP-IDF console.
-
-    config APP_SHT30_UART_TX_GPIO
-        int "SHT30 UART TX GPIO"
-        range 0 39
-        default 17
-        depends on APP_WELLNESS_ENABLED
-        help
-            ESP32 TX pin connected to the SHT30 module RXD pin.
-
-    config APP_SHT30_UART_RX_GPIO
-        int "SHT30 UART RX GPIO"
-        range 0 39
-        default 16
-        depends on APP_WELLNESS_ENABLED
-        help
-            ESP32 RX pin connected to the SHT30 module TXD pin.
+            Starts the stock display, four-key input and local feedback
+            services. The HTTP configuration page remains available when
+            this option is disabled.
 
     config APP_OLED_I2C_PORT
         int "OLED I2C port"
         range 0 1
         default 0
-        depends on APP_WELLNESS_ENABLED
+        depends on APP_BOARD_ENABLED
 
     config APP_OLED_I2C_SDA_GPIO
         int "OLED I2C SDA GPIO"
         range 0 39
         default 21
-        depends on APP_WELLNESS_ENABLED
+        depends on APP_BOARD_ENABLED
 
     config APP_OLED_I2C_SCL_GPIO
         int "OLED I2C SCL GPIO"
         range 0 39
         default 22
-        depends on APP_WELLNESS_ENABLED
+        depends on APP_BOARD_ENABLED
 
     config APP_OLED_I2C_FREQ_HZ
         int "OLED I2C clock frequency"
         range 100000 400000
         default 100000
-        depends on APP_WELLNESS_ENABLED
+        depends on APP_BOARD_ENABLED
+
+    choice APP_OLED_CONTROLLER
+        prompt "1.3-inch OLED controller"
+        default APP_OLED_CONTROLLER_SH1106
+        depends on APP_BOARD_ENABLED
+        help
+            Most 1.3-inch 128x64 I2C OLED modules use SH1106. Choose SSD1306
+            when the module explicitly identifies an SSD1306 controller.
+
+        config APP_OLED_CONTROLLER_SH1106
+            bool "SH1106 (132x64 RAM)"
+
+        config APP_OLED_CONTROLLER_SSD1306
+            bool "SSD1306 (128x64 RAM)"
+    endchoice
+
+    config APP_BUTTON_K1_GPIO
+        int "K1 GPIO"
+        range 0 39
+        default 27
+        depends on APP_BOARD_ENABLED
+
+    config APP_BUTTON_K2_GPIO
+        int "K2 GPIO"
+        range 0 39
+        default 16
+        depends on APP_BOARD_ENABLED
+
+    config APP_BUTTON_K3_GPIO
+        int "K3 GPIO"
+        range 0 39
+        default 17
+        depends on APP_BOARD_ENABLED
+
+    config APP_BUTTON_K4_GPIO
+        int "K4 GPIO"
+        range 0 39
+        default 14
+        depends on APP_BOARD_ENABLED
 
     config APP_BUZZER_ENABLED
         bool "Enable active buzzer feedback"
         default y
-        depends on APP_WELLNESS_ENABLED
+        depends on APP_BOARD_ENABLED
         help
-            Drives the active-high buzzer service for sedentary and water
-            reminders. Disable this when no buzzer is connected; the OLED
-            and HTTP status still show reminder state.
+            Drives the active-high buzzer service for key confirmation and
+            stock refresh feedback.
 
     config APP_BUZZER_GPIO
         int "Active buzzer GPIO"
@@ -133,7 +137,7 @@ menu "WeMos R32 application"
     config APP_VIBRATION_ENABLED
         bool "Enable vibration motor feedback"
         default y
-        depends on APP_WELLNESS_ENABLED
+        depends on APP_BOARD_ENABLED
         help
             Drives the vibration service through a three-wire motor module
             with an active-high IN input. Do not connect a bare two-wire
@@ -149,10 +153,38 @@ menu "WeMos R32 application"
             GPIO connected to the motor module IN input. GPIO26 is used by
             default and is independent from the buzzer on GPIO25.
 
+    config APP_STATUS_LED_ENABLED
+        bool "Enable board status LED"
+        default y
+        depends on APP_BOARD_ENABLED
+        help
+            Drives the onboard user LED independently from the external RGB
+            indicator. The ESPDUINO-32 HW707 schematic connects IO2 through
+            the blue LED and a 1 kOhm resistor to ground.
+
+    config APP_STATUS_LED_GPIO
+        int "Board status LED GPIO"
+        range 0 39
+        default 2
+        depends on APP_STATUS_LED_ENABLED
+        help
+            GPIO2 is the onboard blue user LED on the ESPDUINO-32 HW707.
+            The red power LED is hard-wired to 3.3 V and is not controlled by
+            firmware.
+
+    config APP_STATUS_LED_ACTIVE_HIGH
+        bool "Board status LED is active high"
+        default y
+        depends on APP_STATUS_LED_ENABLED
+        help
+            The HW707 user LED is connected from IO2 through a resistor to
+            ground, so a high GPIO level turns it on. Disable this option for
+            boards whose user LED is connected to 3.3 V and sinks current.
+
     config APP_RGB_LED_ENABLED
         bool "Enable RGB indicator LED"
         default y
-        depends on APP_WELLNESS_ENABLED
+        depends on APP_BOARD_ENABLED
         help
             Drives a common-cathode RGB LED through three LEDC PWM channels.
             The R, G and B inputs are active-high. Use series resistors when
@@ -175,29 +207,5 @@ menu "WeMos R32 application"
         range 0 39
         default 18
         depends on APP_RGB_LED_ENABLED
-
-    config APP_SEDENTARY_INITIAL_MINUTES
-        int "First sedentary alert after minutes"
-        range 1 240
-        default 45
-        depends on APP_WELLNESS_ENABLED
-
-    config APP_SEDENTARY_ESCALATION_MINUTES
-        int "Repeat alert interval while seated"
-        range 1 60
-        default 5
-        depends on APP_WELLNESS_ENABLED
-
-    config APP_SEDENTARY_BREAK_MINUTES
-        int "Required break duration in minutes"
-        range 1 30
-        default 3
-        depends on APP_WELLNESS_ENABLED
-
-    config APP_SEDENTARY_ABSENCE_SECONDS
-        int "No-motion interval before break candidate"
-        range 5 300
-        default 30
-        depends on APP_WELLNESS_ENABLED
 
 endmenu

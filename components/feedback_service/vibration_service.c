@@ -5,48 +5,12 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "feedback_player.h"
 #include "freertos/FreeRTOS.h"
+#include "vibration_patterns_internal.h"
 
 #define VIBRATION_TICK_US 10000u
 
 static const char *TAG = "vibration";
-
-static const feedback_pulse_t WATER_PULSES[] = {
-    {220u, 180u},
-    {220u, 0u},
-};
-static const feedback_pulse_t SEDENTARY_PULSES[] = {
-    {300u, 200u},
-    {300u, 0u},
-};
-static const feedback_pulse_t ESCALATED_PULSES[] = {
-    {350u, 180u},
-    {350u, 180u},
-    {350u, 0u},
-};
-static const feedback_pulse_t CONFIRM_PULSES[] = {
-    {100u, 0u},
-};
-
-static const feedback_pattern_t s_patterns[] = {
-    [VIBRATION_PATTERN_NONE] = {NULL, 0u},
-    [VIBRATION_PATTERN_WATER_REMINDER] = {
-        WATER_PULSES, (uint8_t)(sizeof(WATER_PULSES) / sizeof(WATER_PULSES[0]))
-    },
-    [VIBRATION_PATTERN_SEDENTARY_ALERT] = {
-        SEDENTARY_PULSES,
-        (uint8_t)(sizeof(SEDENTARY_PULSES) / sizeof(SEDENTARY_PULSES[0]))
-    },
-    [VIBRATION_PATTERN_SEDENTARY_ESCALATED] = {
-        ESCALATED_PULSES,
-        (uint8_t)(sizeof(ESCALATED_PULSES) / sizeof(ESCALATED_PULSES[0]))
-    },
-    [VIBRATION_PATTERN_CONFIRM] = {
-        CONFIRM_PULSES, (uint8_t)(sizeof(CONFIRM_PULSES) /
-                                  sizeof(CONFIRM_PULSES[0]))
-    },
-};
 
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 static feedback_player_t s_player;
@@ -81,12 +45,6 @@ static void vibration_timer_callback(void *argument)
 {
     (void)argument;
     apply_player_state();
-}
-
-static bool pattern_valid(vibration_pattern_t pattern)
-{
-    return pattern >= VIBRATION_PATTERN_NONE &&
-           pattern <= VIBRATION_PATTERN_CONFIRM;
 }
 
 esp_err_t vibration_service_start(
@@ -150,7 +108,9 @@ esp_err_t vibration_service_start(
 
 esp_err_t vibration_service_play(vibration_pattern_t pattern)
 {
-    if (!pattern_valid(pattern)) {
+    const feedback_pattern_t *pattern_config;
+
+    if (!vibration_pattern_valid(pattern)) {
         return ESP_ERR_INVALID_ARG;
     }
     if (!s_ready) {
@@ -160,11 +120,15 @@ esp_err_t vibration_service_play(vibration_pattern_t pattern)
         vibration_service_stop();
         return ESP_OK;
     }
+    pattern_config = vibration_pattern_get(pattern);
+    if (pattern_config == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
 
     taskENTER_CRITICAL(&s_mux);
     s_pattern = pattern;
     s_play_count++;
-    feedback_player_start(&s_player, &s_patterns[pattern],
+    feedback_player_start(&s_player, pattern_config,
                           (uint64_t)esp_timer_get_time());
     taskEXIT_CRITICAL(&s_mux);
     apply_player_state();
@@ -219,12 +183,10 @@ bool vibration_service_get_snapshot(vibration_service_snapshot_t *snapshot)
 
 uint8_t vibration_service_pattern_pulse_count(vibration_pattern_t pattern)
 {
-    return pattern_valid(pattern) ? s_patterns[pattern].pulse_count : 0u;
+    return vibration_pattern_pulse_count(pattern);
 }
 
 uint32_t vibration_service_pattern_duration_ms(vibration_pattern_t pattern)
 {
-    return pattern_valid(pattern)
-               ? feedback_pattern_duration_ms(&s_patterns[pattern])
-               : 0u;
+    return vibration_pattern_duration_ms(pattern);
 }

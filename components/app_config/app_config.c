@@ -29,38 +29,33 @@ static const char *TAG = "app_config";
 #define APP_HTTP_SERVER_ENABLED false
 #endif
 
-#ifdef CONFIG_APP_WELLNESS_ENABLED
-#define APP_WELLNESS_ENABLED true
-#define APP_PIR_GPIO CONFIG_APP_PIR_GPIO
-#define APP_SHT30_UART_PORT CONFIG_APP_SHT30_UART_PORT
-#define APP_SHT30_TX_GPIO CONFIG_APP_SHT30_UART_TX_GPIO
-#define APP_SHT30_RX_GPIO CONFIG_APP_SHT30_UART_RX_GPIO
+#ifdef CONFIG_APP_BOARD_ENABLED
+#define APP_BOARD_ENABLED true
 #define APP_OLED_I2C_PORT CONFIG_APP_OLED_I2C_PORT
 #define APP_OLED_SDA_GPIO CONFIG_APP_OLED_I2C_SDA_GPIO
 #define APP_OLED_SCL_GPIO CONFIG_APP_OLED_I2C_SCL_GPIO
 #define APP_OLED_I2C_HZ CONFIG_APP_OLED_I2C_FREQ_HZ
-#define APP_SEDENTARY_INITIAL_MS \
-    ((uint32_t)CONFIG_APP_SEDENTARY_INITIAL_MINUTES * 60u * 1000u)
-#define APP_SEDENTARY_ESCALATION_MS \
-    ((uint32_t)CONFIG_APP_SEDENTARY_ESCALATION_MINUTES * 60u * 1000u)
-#define APP_SEDENTARY_BREAK_MS \
-    ((uint32_t)CONFIG_APP_SEDENTARY_BREAK_MINUTES * 60u * 1000u)
-#define APP_SEDENTARY_ABSENCE_MS \
-    ((uint32_t)CONFIG_APP_SEDENTARY_ABSENCE_SECONDS * 1000u)
+#define APP_OLED_CONTROLLER \
+    (CONFIG_APP_OLED_CONTROLLER_SH1106 \
+         ? APP_OLED_CONTROLLER_SH1106 \
+         : APP_OLED_CONTROLLER_SSD1306)
+#define APP_BUTTON_K1_GPIO CONFIG_APP_BUTTON_K1_GPIO
+#define APP_BUTTON_K2_GPIO CONFIG_APP_BUTTON_K2_GPIO
+#define APP_BUTTON_K3_GPIO CONFIG_APP_BUTTON_K3_GPIO
+#define APP_BUTTON_K4_GPIO CONFIG_APP_BUTTON_K4_GPIO
+#define APP_BUTTON_ACTIVE_LOW true
 #else
-#define APP_WELLNESS_ENABLED false
-#define APP_PIR_GPIO 0
-#define APP_SHT30_UART_PORT 2
-#define APP_SHT30_TX_GPIO 17
-#define APP_SHT30_RX_GPIO 16
+#define APP_BOARD_ENABLED false
 #define APP_OLED_I2C_PORT 0
 #define APP_OLED_SDA_GPIO 21
 #define APP_OLED_SCL_GPIO 22
 #define APP_OLED_I2C_HZ 100000u
-#define APP_SEDENTARY_INITIAL_MS (45u * 60u * 1000u)
-#define APP_SEDENTARY_ESCALATION_MS (5u * 60u * 1000u)
-#define APP_SEDENTARY_BREAK_MS (3u * 60u * 1000u)
-#define APP_SEDENTARY_ABSENCE_MS (30u * 1000u)
+#define APP_OLED_CONTROLLER APP_OLED_CONTROLLER_SH1106
+#define APP_BUTTON_K1_GPIO 27
+#define APP_BUTTON_K2_GPIO 16
+#define APP_BUTTON_K3_GPIO 17
+#define APP_BUTTON_K4_GPIO 14
+#define APP_BUTTON_ACTIVE_LOW true
 #endif
 
 #ifdef CONFIG_APP_BUZZER_ENABLED
@@ -89,6 +84,20 @@ static const char *TAG = "app_config";
 #define APP_RGB_LED_RED_GPIO 0
 #define APP_RGB_LED_GREEN_GPIO 0
 #define APP_RGB_LED_BLUE_GPIO 0
+#endif
+
+#ifdef CONFIG_APP_STATUS_LED_ENABLED
+#define APP_STATUS_LED_ENABLED true
+#define APP_STATUS_LED_GPIO CONFIG_APP_STATUS_LED_GPIO
+#ifdef CONFIG_APP_STATUS_LED_ACTIVE_HIGH
+#define APP_STATUS_LED_ACTIVE_HIGH true
+#else
+#define APP_STATUS_LED_ACTIVE_HIGH false
+#endif
+#else
+#define APP_STATUS_LED_ENABLED false
+#define APP_STATUS_LED_GPIO 2
+#define APP_STATUS_LED_ACTIVE_HIGH true
 #endif
 
 #ifdef APP_WIFI_INI_EMBEDDED
@@ -224,28 +233,31 @@ static app_config_t s_app_config = {
         .sta_ssid = APP_STA_SSID,
         .sta_password = APP_STA_PASSWORD,
     },
-    .wellness = {
-        .enabled = APP_WELLNESS_ENABLED,
-        .pir_gpio = APP_PIR_GPIO,
-        .sht30_uart_port = APP_SHT30_UART_PORT,
-        .sht30_tx_gpio = APP_SHT30_TX_GPIO,
-        .sht30_rx_gpio = APP_SHT30_RX_GPIO,
+    .board = {
+        .enabled = APP_BOARD_ENABLED,
         .oled_i2c_port = APP_OLED_I2C_PORT,
         .oled_sda_gpio = APP_OLED_SDA_GPIO,
         .oled_scl_gpio = APP_OLED_SCL_GPIO,
         .oled_i2c_hz = APP_OLED_I2C_HZ,
+        .oled_controller = APP_OLED_CONTROLLER,
+        .button_gpio = {
+            APP_BUTTON_K1_GPIO,
+            APP_BUTTON_K2_GPIO,
+            APP_BUTTON_K3_GPIO,
+            APP_BUTTON_K4_GPIO,
+        },
+        .button_active_low = APP_BUTTON_ACTIVE_LOW,
         .buzzer_enabled = APP_BUZZER_ENABLED,
         .buzzer_gpio = APP_BUZZER_GPIO,
         .vibration_enabled = APP_VIBRATION_ENABLED,
         .vibration_gpio = APP_VIBRATION_GPIO,
+        .status_led_enabled = APP_STATUS_LED_ENABLED,
+        .status_led_gpio = APP_STATUS_LED_GPIO,
+        .status_led_active_high = APP_STATUS_LED_ACTIVE_HIGH,
         .rgb_led_enabled = APP_RGB_LED_ENABLED,
         .rgb_red_gpio = APP_RGB_LED_RED_GPIO,
         .rgb_green_gpio = APP_RGB_LED_GREEN_GPIO,
         .rgb_blue_gpio = APP_RGB_LED_BLUE_GPIO,
-        .sedentary_initial_ms = APP_SEDENTARY_INITIAL_MS,
-        .sedentary_escalation_ms = APP_SEDENTARY_ESCALATION_MS,
-        .sedentary_break_ms = APP_SEDENTARY_BREAK_MS,
-        .sedentary_absence_ms = APP_SEDENTARY_ABSENCE_MS,
     },
 };
 

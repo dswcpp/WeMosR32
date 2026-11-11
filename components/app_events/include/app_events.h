@@ -12,24 +12,25 @@ extern "C" {
 
 typedef enum {
     APP_EVENT_NONE = 0,
-    APP_EVENT_SEDENTARY_GENTLE_NUDGE,
-    APP_EVENT_SEDENTARY_ACTIVITY_NUDGE,
-    APP_EVENT_SEDENTARY_ALERT_STARTED,
-    APP_EVENT_SEDENTARY_ALERT_ESCALATED,
-    APP_EVENT_SEDENTARY_SHORT_BREAK_RETURN,
-    APP_EVENT_SEDENTARY_BREAK_COMPLETED,
-    APP_EVENT_SEDENTARY_PHASE_CHANGED,
-    APP_EVENT_CARE_WATER_REMINDER,
+    APP_EVENT_STOCK_REFRESHED,
+    APP_EVENT_STOCK_REFRESH_FAILED,
+    APP_EVENT_STOCK_REFRESH_STARTED,
+    APP_EVENT_STOCK_PRICE_ALERT,
+    APP_EVENT_STOCK_VIEW_CHANGED,
+    APP_EVENT_WIFI_STATION_CONNECTING,
     APP_EVENT_WIFI_STATION_CONNECTED,
     APP_EVENT_WIFI_STATION_DISCONNECTED,
     APP_EVENT_WIFI_CLIENT_CONNECTED,
     APP_EVENT_WIFI_CLIENT_DISCONNECTED,
+    APP_EVENT_CONFIG_UPDATED,
+    APP_EVENT_CONFIG_SAVE_FAILED,
+    APP_EVENT_SYSTEM_DEGRADED,
 } app_event_type_t;
 
 typedef enum {
     APP_EVENT_SOURCE_SYSTEM = 0,
-    APP_EVENT_SOURCE_WELLNESS,
-    APP_EVENT_SOURCE_CARE,
+    APP_EVENT_SOURCE_STOCK,
+    APP_EVENT_SOURCE_MONITOR,
     APP_EVENT_SOURCE_WIFI,
 } app_event_source_t;
 
@@ -45,11 +46,7 @@ typedef struct {
     app_event_severity_t severity;
     uint32_t timestamp_ms;
     uint32_t sequence;
-    /*
-     * Event-specific payload. For APP_EVENT_SEDENTARY_PHASE_CHANGED,
-     * value is the target phase, detail is the previous phase, and cause is
-     * the sedentary_transition_reason_t value.
-     */
+    /* Event-specific payload. */
     int32_t value;
     int32_t detail;
     int32_t cause;

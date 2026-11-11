@@ -14,6 +14,7 @@ wifi.ini
 *.size
 __pycache__/
 *.py[cod]
+/oled_*.pbm
 
 # Editor and OS files
 .vscode/

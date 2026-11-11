@@ -11,14 +11,14 @@ extern "C" {
 
 typedef enum {
     BUZZER_PATTERN_NONE = 0,
-    /* Water: two soft 120 ms beeps separated by 200 ms. */
-    BUZZER_PATTERN_WATER_REMINDER,
-    /* Sedentary: two firm 160 ms beeps separated by 220 ms. */
-    BUZZER_PATTERN_SEDENTARY_ALERT,
-    /* Escalation: three firm 160 ms beeps separated by 180 ms. */
-    BUZZER_PATTERN_SEDENTARY_ESCALATED,
-    /* Confirmation: one short 80 ms beep. */
-    BUZZER_PATTERN_CONFIRM,
+    /* Navigation: one very short 30 ms click. */
+    BUZZER_PATTERN_NAVIGATE,
+    /* Refresh success: two 60 ms beeps separated by 80 ms. */
+    BUZZER_PATTERN_REFRESH_SUCCESS,
+    /* Refresh failure: three 100 ms beeps separated by 90 ms. */
+    BUZZER_PATTERN_REFRESH_FAILED,
+    /* Price threshold: two firm 120 ms beeps separated by 100 ms. */
+    BUZZER_PATTERN_PRICE_ALERT,
 } buzzer_pattern_t;
 
 typedef struct {

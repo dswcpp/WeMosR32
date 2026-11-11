@@ -18,14 +18,33 @@ typedef enum {
 
 typedef enum {
     FEEDBACK_SCENE_NONE = 0,
-    /* Buzzer: 2x120 ms; vibration: 2x220 ms. */
-    FEEDBACK_SCENE_WATER_REMINDER,
-    /* Buzzer: 2x160 ms; vibration: 2x300 ms. */
-    FEEDBACK_SCENE_SEDENTARY_ALERT,
-    /* Buzzer: 3x160 ms; vibration: 3x350 ms. */
-    FEEDBACK_SCENE_SEDENTARY_ESCALATED,
-    /* Buzzer: 1x80 ms; vibration: 1x100 ms. */
-    FEEDBACK_SCENE_CONFIRM,
+    /* Haptic tap; sound is a short click. */
+    FEEDBACK_SCENE_NAVIGATE,
+    /* Manual refresh accepted; vibration: 2x180 ms. */
+    FEEDBACK_SCENE_REFRESH_STARTED,
+    /* Vibration: one 350 ms confirmation. */
+    FEEDBACK_SCENE_REFRESH_SUCCESS,
+    /* Vibration: 2x500 ms separated by 200 ms. */
+    FEEDBACK_SCENE_REFRESH_FAILED,
+    /* Vibration: 2x700 ms separated by 250 ms. */
+    FEEDBACK_SCENE_PRICE_ALERT,
+    /* Vibration: one 320 ms confirmation. */
+    FEEDBACK_SCENE_CONFIG_SAVED,
+    /* Vibration: 2x450 ms separated by 180 ms. */
+    FEEDBACK_SCENE_CONFIG_SAVE_FAILED,
+    /* Vibration: 2x220 ms separated by 110 ms. */
+    FEEDBACK_SCENE_WIFI_CONNECTING,
+    /* Vibration: 2x350 ms separated by 130 ms. */
+    FEEDBACK_SCENE_WIFI_CONNECTED,
+    /* Vibration: 2x550 ms separated by 220 ms. */
+    FEEDBACK_SCENE_WIFI_DISCONNECTED,
+    /* Vibration: one 200 ms notification. */
+    FEEDBACK_SCENE_CLIENT_CONNECTED,
+    /* Vibration: one 260 ms notification. */
+    FEEDBACK_SCENE_CLIENT_DISCONNECTED,
+    /* Vibration: 3x420 ms with two 180 ms gaps. */
+    FEEDBACK_SCENE_SYSTEM_DEGRADED,
+    FEEDBACK_SCENE_COUNT,
 } feedback_scene_t;
 
 typedef struct {

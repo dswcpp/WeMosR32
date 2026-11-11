@@ -1,9 +1,12 @@
 idf_component_register(
-    SRCS "rgb_indicator.c"
+    SRCS
+        "rgb_indicator.c"
+        "rgb_indicator_engine.c"
     INCLUDE_DIRS "include"
     REQUIRES
-        config_service
+        app_events
         esp_driver_gpio
         esp_driver_ledc
+        esp_timer
         freertos
 )

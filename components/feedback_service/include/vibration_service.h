@@ -4,22 +4,11 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "vibration_patterns.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef enum {
-    VIBRATION_PATTERN_NONE = 0,
-    /* Water: two 220 ms pulses separated by 180 ms. */
-    VIBRATION_PATTERN_WATER_REMINDER,
-    /* Sedentary: two 300 ms pulses separated by 200 ms. */
-    VIBRATION_PATTERN_SEDENTARY_ALERT,
-    /* Escalation: three 350 ms pulses separated by 180 ms. */
-    VIBRATION_PATTERN_SEDENTARY_ESCALATED,
-    /* Confirmation: one short 100 ms pulse. */
-    VIBRATION_PATTERN_CONFIRM,
-} vibration_pattern_t;
 
 typedef struct {
     bool enabled;
