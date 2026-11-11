@@ -1,217 +1,312 @@
 # Architecture
 
+## Product boundary
+
+This branch targets a single-purpose ESP32 stock monitor:
+
+- Market quotes are displayed only on the local 1.3-inch OLED.
+- The Web application is a large-text configuration surface.
+- SHT30, PIR, wellness reminders, weather, and their state machines are not
+  part of the product or the firmware build.
+
 ## Startup sequence
 
-`app_main` is an orchestration layer. It records each initialization result in
-`startup_service` and does not treat every failed subsystem as fatal:
+`main/app_main.c` is the orchestration layer. Every startup service records
+its result in `startup_service`, which makes boot degradation visible on the
+serial console and in the final startup snapshot.
 
-1. Record the ESP reset reason and enter the core stage.
-2. Initialize persistent configuration storage through `config_service`.
-3. Start the application event queue and subscriber dispatcher.
-4. Resolve build-time defaults from `app_config` and start Wi-Fi in
-   STA+SoftAP mode.
-5. Start time synchronization, the weather refresh task, the feedback services,
-   and the wellness monitor.
-6. Start the HTTP status API with up to three attempts.
-7. Finish the startup snapshot and return from `app_main`; ESP-IDF and FreeRTOS
-   continue running the system tasks.
+1. Record the reset reason and start the independent onboard status LED.
+2. Initialize persistent configuration storage and the process-wide event
+   dispatcher.
+3. Start the RGB light-language and feedback services.
+4. Start the stock configuration owner with persisted settings or in-memory
+   defaults.
+5. Start the button service, stock monitor, and OLED retry loop.
+6. Start Wi-Fi in station plus SoftAP mode.
+7. Start the HTTP configuration server.
+8. Start network time synchronization as a background capability.
+9. Finish the startup snapshot and select ready, degraded, or safe-mode
+   indication.
 
-Only `config_service` and `app_events` are boot-critical. A failure there records
-the failed stage, waits briefly so the serial log can be captured, and performs
-a controlled restart. Wi-Fi, time, weather, feedback, wellness, and HTTP failures
-remain visible as failed service records while the rest of the device continues
-in degraded mode. Feedback can additionally be `degraded` when only one output
-device is available.
+`config_service` and `app_events` are required for normal persistence and event
+delivery. Their failures record a diagnostic trail and enter
+`STARTUP_STATE_SAFE_MODE`, but do not create a boot loop. Stock settings fall
+back to in-memory defaults so the OLED, keys, SoftAP, and HTTP recovery surface
+can remain available. Wi-Fi, time, feedback, display, key, and HTTP failures are
+reported as degraded services.
 
-Disabling a feature records `disabled`; it is not treated as a boot failure.
-Pending or starting services make the final snapshot degraded, which catches
-missing startup steps instead of silently reporting success. Startup failures
-are sticky, so a repeated lower-severity result cannot hide the original error.
+`STARTUP_STATE_READY` means the local startup contract completed. It does not
+wait for station IP, network time, or a first market quote. The stock service
+waits for an actual station connection before refreshing and requests an
+immediate refresh on connection or reconnection.
 
-`startup_service` owns a fixed-size, thread-safe snapshot containing:
-
-- overall state: `booting`, `ready`, `degraded`, or `failed`
-- current stage
-- reset reason
-- total startup duration
-- per-service state, first error, start time, finish time, and duration
-
-The `/api/v1/status` response exposes this snapshot under `startup` without
-changing existing fields. This gives diagnostics access to boot health even when
-an optional subsystem failed before the web UI became available.
-
-## Components
-
-### `app_events`
-
-Owns the process-wide event queue and serialized subscriber dispatch. Producers
-publish small typed events for state changes that consumers must observe.
-Current device state remains available through component snapshots; events are
-reserved for occurrences such as reminders, alerts, and recovery actions.
-
-Every event carries source, severity, timestamp, and a process-wide sequence.
-The `value` and `detail` fields are event-specific payloads. In particular,
-`APP_EVENT_SEDENTARY_PHASE_CHANGED` uses `value` for the target phase and
-`detail` for the previous phase. Its `cause` field carries the
-`sedentary_transition_reason_t` value. Phase values are integer
-`sedentary_phase_t` values; phase and reason values can be converted to stable
-names with `sedentary_phase_name()` and
-`sedentary_transition_reason_name()`.
-
-Publishing is non-blocking and returns `ESP_ERR_TIMEOUT` when the queue is full.
-Subscriber callbacks run in the event task, so they must not perform long or
-blocking work.
+## Component ownership
 
 ### `app_config`
 
-Owns immutable build-time settings sourced from `menuconfig`. Product-specific
-defaults belong here rather than inside networking code.
+Owns immutable build-time defaults from `menuconfig`:
+
+- OLED I2C port, pins, clock, and controller
+- K1-K4 GPIOs and polarity
+- buzzer and vibration motor GPIOs
+- onboard status LED enable state, GPIO, and polarity
+- RGB enable state and red, green, and blue GPIOs
+
+Runtime code reads these values through `app_config_get()`.
 
 ### `config_service`
 
-Owns NVS initialization, recovery, and all mutable persistent configuration.
-Feature components use typed Wi-Fi operations or registered blob items instead
-of calling NVS directly. Existing namespaces and keys are preserved so firmware
-updates retain saved Wi-Fi and care settings.
+Owns NVS initialization and typed persistent records. Stock settings are saved
+under the versioned `stock_cfg` blob contract. Feature components do not call
+NVS directly.
+
+Wi-Fi credentials are saved only after the station receives an IP address.
+This prevents a failed password attempt from overwriting the last known-good
+network.
 
 ### `wifi_manager`
 
-Owns the Wi-Fi and IP event lifecycle. It exposes a small API for startup and
-status queries. SoftAP remains enabled when station mode is configured. Saved
-station credentials are loaded and written through `config_service`. Station
-and SoftAP client transitions are also published through `app_events`.
+Owns station and SoftAP lifecycle, event handling, saved credentials, and IP
+state. Station logs and quote requests rely on `wifi_manager_sta_connected()`.
 
-### `weather_service`
+Wi-Fi provisioning priority is:
 
-Owns outdoor weather requests, scheduling, validation, and cached conditions.
-It uses Open-Meteo over HTTPS with the ESP-IDF CA bundle and requires both an
-upstream Wi-Fi connection and a valid device clock before issuing a request.
-Successful data refreshes every 30 minutes; failures retry after one minute.
+1. Saved NVS network.
+2. Embedded `wifi.ini`.
+3. Build-time station defaults.
 
-Settings and the latest valid response are serialized records stored through
-`config_service` in the `weather_cfg` namespace. Changing coordinates clears the
-old cache. Snapshots expose current conditions, daily high/low, observation
-time, data age, stale state, refresh state, and the last error. The HTTP layer
-consumes snapshots and delegates validated settings updates and manual refresh
-requests to this component.
+### `button_service`
+
+Owns a fixed four-button configuration and one scanner task. The service:
+
+- samples every 10 ms
+- applies 25 ms debounce
+- emits short press after release
+- emits one long-press event while held
+- keeps per-button short and long press counters
+
+Consumers only see `button_event_t` events and a snapshot. GPIO filtering is not
+duplicated in the stock monitor.
+
+### `stock_service`
+
+Owns:
+
+- the validated watch list, up to eight symbols
+- refresh interval and per-stock upper/lower price-limit persistence
+- Tencent quote HTTP retrieval
+- bounded response buffering and quote parsing
+- last-known-good quote retention on failed requests
+- refresh and failure counters
+- analysis input and snapshots
+
+Symbols are normalized before duplicate checks, so `600519` and `sh600519`
+cannot both be saved. A refresh failure does not erase previous quotes; the
+monitor marks data stale using the refresh interval with a five-minute floor.
+
+### `stock_monitor_state`
+
+This is a pure C state machine with no GPIO, HTTP, NVS, or FreeRTOS dependency.
+It is host-tested and owns:
+
+- selected stock index
+- stock count clamping
+- quote, indicator, analysis, and decision view cycling
+- data states: waiting, fresh, stale, error, empty
+- refresh-request output
+
+K4 cycles exactly four data views.
+
+### `oled_display`
+
+Owns the I2C bus and SH1106/SSD1306 controller differences. The public API is a
+small framebuffer and text interface; business code does not know the
+controller command set. Initialization is retried by `stock_monitor` so a
+display connected late or reset independently can recover.
+
+### `stock_monitor`
+
+Adapts the pure state machine to hardware and product behavior:
+
+- reads snapshots once per monitor cycle
+- polls key events without blocking
+- applies K1/K2 navigation, K3 refresh, and K4 view changes
+- redraws at a bounded rate
+- keeps last quotes when the network fails
+- integrates the intraday line and indicator values into data views
+- triggers each stock's upper/lower price-limit feedback once per crossing
+- re-reads stock configuration once per second so Web changes apply live
+
+The header places the stock code on the left and the current local time plus
+weekday abbreviation in the remaining centered space. The quote view shows the
+large price, intraday line, percent/amount change, high/low, volume, and
+turnover. The indicator view gives RSI, MACD histogram, EMA spread, and volume
+ratio their own hierarchy. The analysis view combines score, trend direction,
+open/previous close, VWAP distance, and Bollinger bands. The OLED uses page
+marks rather than navigation or system-status text. The decision view maps
+EMA, MACD, RSI, VWAP, Bollinger width, current price, and reward/risk into one
+of `READY`, `WAIT`, `AVOID`, or `NO DATA`, then shows entry range, invalidation,
+target, stop distance, and reward/risk. It is a technical-analysis reference,
+not a promise of investment return.
 
 ### `feedback_service`
 
-Owns the active buzzer and vibration motor as two independent services:
-`buzzer_service` and `vibration_service`. Each actuator service owns its GPIO,
-output polarity, pulse player, stop behavior, and status snapshot.
-`feedback_service` maps semantic scenes (`water`, `sedentary`, `escalated`, and
-`confirm`) to actuator-specific pulse patterns and applies the current
-`both`/`vibrate`/`sound`/`silent` mode.
+`buzzer_service` and `vibration_service` are independent actuator services.
+Each owns its GPIO, timing task, stop behavior, pattern player, and snapshot.
+They do not inspect stock state.
 
-Only one scene is played at a time. Business priority is escalation, first
-sedentary alert, then water reminder, so two reminders cannot stack into a
-continuous or confusing output. Patterns use bounded pulses rather than long
-continuous drive. The longest buzzer pulse is 160 ms, the longest motor pulse
-is 350 ms, and the longest complete motor pattern is 1410 ms.
+`feedback_service` maps semantic scenes to both actuators:
 
-`care_coordinator` owns cross-domain scene priority. The actuator services never
-inspect sedentary, water, or care state. This keeps the buzzer and motor
-reusable for future confirmations, pairing flows, or fault alerts.
+| Scene | Vibration | Vibrate total | Buzzer |
+| --- | --- | ---: | --- |
+| Navigation | 1 x 180 ms | 180 ms | 1 x 30 ms |
+| Refresh started | 2 x 180 ms, 90 ms gap | 450 ms | 1 x 30 ms |
+| Refresh success | 1 x 350 ms | 350 ms | 2 x 60 ms, 80 ms gap |
+| Refresh failure | 2 x 500 ms, 200 ms gap | 1200 ms | 3 x 100 ms, 90 ms gap |
+| Price alert | 2 x 700 ms, 250 ms gap | 1650 ms | 2 x 120 ms, 100 ms gap |
+| Configuration saved | 1 x 320 ms | 320 ms | 2 x 60 ms, 80 ms gap |
+| Configuration failed | 2 x 450 ms, 180 ms gap | 1080 ms | 3 x 100 ms, 90 ms gap |
+| Wi-Fi connecting | 2 x 220 ms, 110 ms gap | 550 ms | 1 x 30 ms |
+| Wi-Fi connected | 2 x 350 ms, 130 ms gap | 830 ms | 2 x 60 ms, 80 ms gap |
+| Wi-Fi disconnected | 2 x 550 ms, 220 ms gap | 1320 ms | 3 x 100 ms, 90 ms gap |
+| SoftAP client connected | 1 x 200 ms | 200 ms | 1 x 30 ms |
+| SoftAP client disconnected | 1 x 260 ms | 260 ms | 1 x 30 ms |
+| System degraded | 3 x 420 ms, two 180 ms gaps | 1620 ms | 3 x 100 ms, 90 ms gap |
 
-### `wellness_monitor`
+The scene API keeps policy out of GPIO drivers. A future pairing, boot, or fault
+scene can add a pattern without changing stock or button logic.
 
-Owns the wellness task and composes focused modules without exposing their
-mutable state to callers:
+Feedback uses the same event priority model as RGB indication. Price alerts,
+refresh failures, configuration failures, Wi-Fi disconnection, and system
+degradation outrank successful status updates and navigation. A lower-priority
+event cannot interrupt an active higher-priority pattern. Since feedback starts
+before persisted stock settings are loaded, the highest-priority startup event
+is held until the configured output mode is known.
 
-```text
-pir_input -> pir_service -> sedentary_reminder --------+
-                                                       |
-care_guidance -> water_reminder -> care_coordinator ---+-> feedback_service
-                                      |
-                                      +-> RGB and display policy inputs
-```
+### `rgb_indicator`
 
-`pir_input` is the GPIO adapter. `pir_service` owns sampling cadence, debounce,
-stable motion edges, the 120-second presence hold, and presence-expiration
-events. Consumers see only `motion`, `present`, counters, and time remaining.
-This prevents every business module from rebuilding its own PIR filtering.
+Owns the only RGB color policy in the firmware. The public API accepts semantic
+system, network, and stock states plus semantic transient events. It does not
+accept raw channel values.
 
-`sedentary_reminder` remains a pure state machine driven by stable motion
-evidence. `care_guidance` owns caregiver settings, daily progress, water
-scheduling, and quiet periods; `water_reminder` independently owns reminder
-pacing so tests can advance time without NVS, HTTP, or FreeRTOS.
+The service combines two layers:
 
-`care_coordinator` receives sedentary occurrences and a water reminder event,
-then chooses at most one primary scene: escalated sedentary, first sedentary
-alert, or water. Soft nudges remain screen and log guidance. The coordinator
-does not touch GPIO, OLED, FreeRTOS, or persistent storage, so its priority
-rules are deterministic and host-testable.
+- one persistent base scene, selected from boot, network, system health, stock
+  state, SoftAP, and ready states
+- one temporary event scene with a priority, duration, color, brightness, and
+  waveform
 
-Sensor-facing status is published as a snapshot, while reminder and alert
-transitions are published through `app_events`. Care settings and daily
-progress use versioned blobs in `config_service`.
+An event starts a new relative timeline when accepted. A lower-priority event
+cannot interrupt the active event; an equal or higher-priority event replaces
+it. When the event expires, rendering resumes from the current base scene.
 
-The sedentary state machine has one external seam:
+`rgb_indicator_engine.c` is a pure C policy module and is host-tested. The
+driver owns three LEDC channels, gamma and brightness scaling, the render task,
+and GPIO output. Continuous business states call
+`rgb_indicator_set_system_state()`, `rgb_indicator_set_network_state()`, or
+`rgb_indicator_set_stock_state()`. Transient business events flow through
+`app_events` and are translated to `rgb_indicator_notify()`.
 
-- `sedentary_update()` accepts time and motion evidence.
-- `sedentary_update_result_t.snapshot` is the read-only view for the current
-  phase, timers, counters, and alert state.
-- Ordered `transitions` describe every phase change in that update.
-- Ordered `events` carry the phase and reminder level that were active when the
-  event occurred.
+Raw RGB profiles are intentionally private. Adding a business scene means
+adding a semantic enum and profile in the engine, then publishing or setting
+that semantic from the owning component.
 
-Transitions and events use one `order` timeline. The wellness monitor merges
-both lists by `order` before publishing to `app_events`, so a consumer observes
-the same sequence that the state machine recorded. For example, a valid break
-followed by immediate motion produces `on_break -> idle`, then
-`break_completed`, then `idle -> sitting`.
+### `status_led`
 
-Each transition also records a stable business reason. This separates the
-state transition from why it happened, so management code can distinguish a
-short break return from a completed break and an absence from a timer-driven
-alert. The HTTP status endpoint exposes the current stable phase name at
-`wellness.sedentary.phase`.
+Owns the ESPDUINO-32 HW707 onboard blue user LED on `GPIO2`. The schematic
+connects `IO2 -> blue LED -> 1 kOhm -> GND`, making the output active high. The
+red power LED is hard-wired to 3.3 V and is outside firmware control.
 
-All phase changes go through one internal transition helper. `sedentary_update()`
-dispatches to one handler for each phase, and cascaded changes at the same
-observed time are settled in timeline order. Add a new phase by updating the
-phase enum, its handler, and its transition reasons in `sedentary_reminder.c`;
-callers should continue consuming snapshots and events instead of reading
-mutable state fields. Physical output is not part of the sedentary state
-machine. The coordinator selects a care scene, and the wellness task adapts it
-to the feedback service.
+The service has a non-blocking timing task and a host-tested pure pattern
+module:
+
+- booting: three 120 ms flashes
+- ready: one 80 ms heartbeat every 2 seconds
+- degraded: two 120 ms flashes every 2 seconds
+- error: three faster flashes every 1.6 seconds
+
+It stays independent from the external RGB service so a wiring or LEDC failure
+cannot remove the board-level diagnostic indication. `GPIO2` is a strapping
+pin, so the driver initializes the output off and the hardware LED circuit
+must not pull the pin high during reset.
 
 ### `http_api`
 
-Provides an embedded mobile status homepage and local JSON endpoints over the
-active interfaces. Mutable settings are handled by their owning feature
-component and persisted through `config_service`; OTA endpoints are not
-implemented. The web UI includes a weather card and weather settings, with
-fullscreen and landscape carousel modes for mobile use. Dashboard card
-visibility is validated by `http_api`, persisted through `config_service` as a
-versioned blob under `web_cfg/pages`, and reported to the UI through
-`web.pages` in the status response. At least one card must remain enabled.
+Serves one embedded configuration page and a small JSON API:
 
-The browser application is deliberately packaged as one HTML document. A CMake
-custom command compacts and gzip-compresses it, enforces a 64 KiB compressed
-budget, and embeds only the gzip artifact in flash. The original HTML is not
-linked into the firmware. Page labels, descriptions, visibility switches, and
-carousel controls are generated from one metadata table at runtime; this keeps
-the embedded payload and future page additions from carrying parallel copies
-of the same configuration.
+- `GET /api/v1/config`
+- `POST /api/v1/config`
+- `POST /api/v1/buttons`
+- `GET /api/v1/wifi/scan`
+- `POST /api/v1/wifi`
+
+The page handles Wi-Fi, stock list editing, refresh interval, per-stock upper
+and lower price limits, output mode, and K1-K4 remote operation. Each stock row
+is an independent component that displays the current price, today's high,
+today's low, change percentage, and the limits owned by that symbol. Web key
+commands are injected into `button_service` and consumed by `stock_monitor`
+exactly like physical key events.
+
+The HTML is gzip-compressed during the build. The compressed artifact is checked
+against a 64 KiB budget before it is linked into firmware.
+
+## Data flow
+
+```text
+Tencent quote response
+        |
+        v
+  stock_service  ---> persisted stock settings
+        |                    ^
+        | snapshot           |
+        v                    |
+  stock_monitor_state        |
+        |                    |
+        v                    |
+  stock_monitor ------------ OLED
+        |
+        +----> app_events ---> rgb_indicator ---> R/G/B LEDC
+                         |
+                         +--> feedback_service ---> buzzer_service
+                                               +--> vibration_service
+
+startup_state ---> status_led ---> onboard blue LED
+
+button_service ---> stock_monitor
+Web config ------> config_api ---> stock_service
+Web keys --------> config_api ---> button_service ---> stock_monitor
+```
+
+The stock state machine decides navigation and data semantics. The monitor
+decides how to present those states and publishes semantic events. Actuator
+drivers only turn patterns into GPIO timing. RGB business callers provide
+semantics only; color arbitration stays inside `rgb_indicator`.
 
 ## Flash layout
-
-The partition table preserves the existing device layout:
 
 | Partition | Purpose | Offset | Size |
 | --- | --- | ---: | ---: |
 | `otadata` | OTA selection | `0x10000` | 32 KB |
-| `nvs` | Wi-Fi and application data | `0x12000` | 56 KB |
-| `at_customize` | Retained vendor/custom area | `0x20000` | 896 KB |
-| `ota_0` | Primary application slot | `0x100000` | 1.5 MB |
-| `ota_1` | Secondary OTA slot | `0x280000` | 1.5 MB |
+| `nvs` | Wi-Fi and stock configuration | `0x12000` | 56 KB |
+| `at_customize` | Retained custom area | `0x20000` | 896 KB |
+| `ota_0` | Primary application | `0x100000` | 1.5 MB |
+| `ota_1` | Secondary application | `0x280000` | 1.5 MB |
 
-## Next modules
+## Host tests
 
-Add new capabilities as components instead of expanding `app_main.c`:
+`tests/host` covers:
 
-- `device_control` for board-specific I/O
-- `ota_manager` for image download and rollback policy
-- `mqtt_client` or a cloud transport as needed
+- Tencent response parsing
+- stock symbol normalization and duplicate rejection
+- selection wrapping and clamping
+- four-view cycling
+- data freshness and refresh-request state transitions
+- stock analyzer core math and market aggregation
+- decision state rules, entry/stop/target levels, and closed-bar fallback
+- RGB state precedence, event priority, expiry, relative event timing, and
+  complete event-to-scene coverage
+- onboard status LED boot, heartbeat, degraded, and error patterns
+- vibration pattern validity, pulse counts, and phone-style minimum durations
+
+The physical actuator output, status/RGB GPIO output, FreeRTOS tasks, OLED I2C,
+and HTTP handlers require target or hardware-in-the-loop validation.
