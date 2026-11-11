@@ -4,12 +4,15 @@ idf_component_register(
     REQUIRES
         app_events
         app_config
+        button_service
         config_service
         feedback_service
         http_api
+        rgb_indicator
         startup_service
+        status_led
+        stock_monitor
+        stock_service
         time_service
-        weather_service
-        wellness_monitor
         wifi_manager
 )

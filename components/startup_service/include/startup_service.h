@@ -28,21 +28,24 @@ typedef enum {
 
 typedef enum {
     STARTUP_STAGE_CORE = 0,
+    STARTUP_STAGE_LOCAL,
     STARTUP_STAGE_NETWORK,
-    STARTUP_STAGE_TIME,
-    STARTUP_STAGE_SERVICES,
     STARTUP_STAGE_HTTP,
+    STARTUP_STAGE_BACKGROUND,
     STARTUP_STAGE_READY,
 } startup_stage_t;
 
 typedef enum {
     STARTUP_SERVICE_CONFIG = 0,
     STARTUP_SERVICE_EVENTS,
+    STARTUP_SERVICE_STATUS_LED,
+    STARTUP_SERVICE_INDICATOR,
     STARTUP_SERVICE_WIFI,
     STARTUP_SERVICE_TIME,
-    STARTUP_SERVICE_WEATHER,
+    STARTUP_SERVICE_STOCK,
     STARTUP_SERVICE_FEEDBACK,
-    STARTUP_SERVICE_WELLNESS,
+    STARTUP_SERVICE_BUTTONS,
+    STARTUP_SERVICE_MONITOR,
     STARTUP_SERVICE_HTTP,
     STARTUP_SERVICE_COUNT,
 } startup_service_id_t;
@@ -60,6 +63,7 @@ typedef enum {
     STARTUP_STATE_BOOTING = 0,
     STARTUP_STATE_READY,
     STARTUP_STATE_DEGRADED,
+    STARTUP_STATE_SAFE_MODE,
     STARTUP_STATE_FAILED,
 } startup_state_t;
 
@@ -78,6 +82,7 @@ typedef struct {
     bool complete;
     bool degraded;
     bool blocked;
+    bool safe_mode;
     uint32_t started_ms;
     uint32_t finished_ms;
     uint32_t duration_ms;
@@ -94,8 +99,10 @@ void startup_service_mark_starting(startup_service_id_t service,
  * Records the final state of one service.
  *
  * Failures are sticky: a later lower-severity result cannot hide an earlier
- * failed or degraded startup result. Returns false only when a boot-critical
- * service failed and startup cannot continue.
+ * failed or degraded startup result. Returns false when a failure requires
+ * safe mode. Configuration and event services require safe mode because later
+ * services cannot make reliable persistence or delivery guarantees without
+ * them.
  */
 bool startup_service_record(startup_service_id_t service,
                             startup_service_state_t state,

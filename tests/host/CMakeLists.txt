@@ -4,128 +4,196 @@ project(wemos_r32_host_tests C)
 
 enable_testing()
 
-add_executable(sedentary_reminder_test
-    sedentary_reminder_test.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor/sedentary_reminder.c
+set(STOCK_COMPONENT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../components/stock_service")
+set(MONITOR_COMPONENT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../components/stock_monitor")
+set(ANALYZER_COMPONENT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../components/stock_analyzer_embedded")
+set(RGB_COMPONENT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../components/rgb_indicator")
+set(FEEDBACK_COMPONENT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../components/feedback_service")
+set(STATUS_LED_COMPONENT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../components/status_led")
+set(STARTUP_COMPONENT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../components/startup_service")
+set(OLED_COMPONENT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../components/oled_display")
+
+function(configure_stock_test target)
+    target_compile_features(${target} PRIVATE c_std_11)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX)
+    else()
+        target_compile_options(${target} PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+    endif()
+    add_test(NAME ${target} COMMAND ${target})
+endfunction()
+
+add_executable(stock_quote_parser_test
+    stock_quote_parser_test.c
+    ${STOCK_COMPONENT_DIR}/stock_quote_parser.c
+)
+target_include_directories(stock_quote_parser_test PRIVATE
+    ${STOCK_COMPONENT_DIR}/include
 )
 
-target_include_directories(sedentary_reminder_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor
+add_executable(stock_intraday_parser_test
+    stock_intraday_parser_test.c
+    ${STOCK_COMPONENT_DIR}/stock_intraday_parser.c
+)
+target_include_directories(stock_intraday_parser_test PRIVATE
+    ${STOCK_COMPONENT_DIR}/include
 )
 
-target_compile_features(sedentary_reminder_test PRIVATE c_std_11)
-
-if(MSVC)
-    target_compile_options(sedentary_reminder_test PRIVATE /W4 /WX)
-else()
-    target_compile_options(sedentary_reminder_test PRIVATE
-        -Wall -Wextra -Werror -pedantic
-    )
-endif()
-
-add_test(NAME sedentary_reminder_test COMMAND sedentary_reminder_test)
-
-add_executable(feedback_player_test
-    feedback_player_test.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/feedback_service/feedback_player.c
+add_executable(stock_intraday_seed_test
+    stock_intraday_seed_test.c
+    ${STOCK_COMPONENT_DIR}/stock_intraday_parser.c
+    ${STOCK_COMPONENT_DIR}/stock_intraday_seed.c
+    ${ANALYZER_COMPONENT_DIR}/stock_analyzer.c
+)
+target_include_directories(stock_intraday_seed_test PRIVATE
+    ${STOCK_COMPONENT_DIR}/include
+    ${ANALYZER_COMPONENT_DIR}
 )
 
-target_include_directories(feedback_player_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/feedback_service
+add_executable(stock_monitor_state_test
+    stock_monitor_state_test.c
+    ${MONITOR_COMPONENT_DIR}/stock_monitor_state.c
+)
+target_include_directories(stock_monitor_state_test PRIVATE
+    ${MONITOR_COMPONENT_DIR}/include
 )
 
-target_compile_features(feedback_player_test PRIVATE c_std_11)
-
-if(MSVC)
-    target_compile_options(feedback_player_test PRIVATE /W4 /WX)
-else()
-    target_compile_options(feedback_player_test PRIVATE
-        -Wall -Wextra -Werror -pedantic
-    )
-endif()
-
-add_test(NAME feedback_player_test COMMAND feedback_player_test)
-
-add_executable(pir_service_test
-    pir_service_test.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor/pir_service.c
+add_executable(stock_monitor_alert_test
+    stock_monitor_alert_test.c
+    ${MONITOR_COMPONENT_DIR}/stock_monitor_alert.c
+)
+target_include_directories(stock_monitor_alert_test PRIVATE
+    ${MONITOR_COMPONENT_DIR}/include
+    ${STOCK_COMPONENT_DIR}/include
 )
 
-target_include_directories(pir_service_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor
+add_executable(stock_decision_test
+    stock_decision_test.c
+    ${MONITOR_COMPONENT_DIR}/stock_decision.c
+)
+target_include_directories(stock_decision_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/stubs
+    ${MONITOR_COMPONENT_DIR}/include
+    ${STOCK_COMPONENT_DIR}/include
+    ${ANALYZER_COMPONENT_DIR}
 )
 
-target_compile_features(pir_service_test PRIVATE c_std_11)
-
-if(MSVC)
-    target_compile_options(pir_service_test PRIVATE /W4 /WX)
-else()
-    target_compile_options(pir_service_test PRIVATE
-        -Wall -Wextra -Werror -pedantic
-    )
-endif()
-
-add_test(NAME pir_service_test COMMAND pir_service_test)
-
-add_executable(care_coordinator_test
-    care_coordinator_test.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor/care_coordinator.c
+add_executable(stock_monitor_visual_test
+    stock_monitor_visual_test.c
+    ${MONITOR_COMPONENT_DIR}/stock_monitor_visual.c
+)
+target_include_directories(stock_monitor_visual_test PRIVATE
+    ${MONITOR_COMPONENT_DIR}/include
+    ${STOCK_COMPONENT_DIR}/include
 )
 
-target_include_directories(care_coordinator_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor
+add_executable(stock_monitor_ui_test
+    stock_monitor_ui_test.c
+    ${MONITOR_COMPONENT_DIR}/stock_decision.c
+    ${MONITOR_COMPONENT_DIR}/stock_monitor_state.c
+    ${MONITOR_COMPONENT_DIR}/stock_monitor_ui.c
+    ${MONITOR_COMPONENT_DIR}/stock_monitor_visual.c
+    ${OLED_COMPONENT_DIR}/oled_canvas.c
+    ${OLED_COMPONENT_DIR}/third_party/u8g2/csrc/u8g2_font.c
+    ${OLED_COMPONENT_DIR}/third_party/u8g2/fonts/u8g2_font_5x7_tf.c
+    ${OLED_COMPONENT_DIR}/third_party/u8g2/fonts/u8g2_font_6x13B_tf.c
+    ${OLED_COMPONENT_DIR}/third_party/u8g2/fonts/u8g2_font_8x13B_tf.c
+    ${OLED_COMPONENT_DIR}/third_party/u8g2/fonts/u8g2_font_9x18B_tf.c
+)
+target_include_directories(stock_monitor_ui_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/stubs
+    ${MONITOR_COMPONENT_DIR}/include
+    ${STOCK_COMPONENT_DIR}/include
+    ${ANALYZER_COMPONENT_DIR}
+    ${OLED_COMPONENT_DIR}/include
+    ${OLED_COMPONENT_DIR}/third_party/u8g2/csrc
 )
 
-target_compile_features(care_coordinator_test PRIVATE c_std_11)
-
-if(MSVC)
-    target_compile_options(care_coordinator_test PRIVATE /W4 /WX)
-else()
-    target_compile_options(care_coordinator_test PRIVATE
-        -Wall -Wextra -Werror -pedantic
-    )
-endif()
-
-add_test(NAME care_coordinator_test COMMAND care_coordinator_test)
-
-add_executable(water_reminder_test
-    water_reminder_test.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor/water_reminder.c
+add_executable(stock_analyzer_core_test
+    ${ANALYZER_COMPONENT_DIR}/test_stock_analyzer.c
+    ${ANALYZER_COMPONENT_DIR}/stock_analyzer.c
+)
+target_include_directories(stock_analyzer_core_test PRIVATE
+    ${ANALYZER_COMPONENT_DIR}
 )
 
-target_include_directories(water_reminder_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor
+add_executable(stock_market_core_test
+    ${ANALYZER_COMPONENT_DIR}/test_stock_market.c
+    ${ANALYZER_COMPONENT_DIR}/stock_market.c
+    ${ANALYZER_COMPONENT_DIR}/stock_analyzer.c
+)
+target_include_directories(stock_market_core_test PRIVATE
+    ${ANALYZER_COMPONENT_DIR}
 )
 
-target_compile_features(water_reminder_test PRIVATE c_std_11)
+add_executable(rgb_indicator_engine_test
+    rgb_indicator_engine_test.c
+    ${RGB_COMPONENT_DIR}/rgb_indicator_engine.c
+)
+target_include_directories(rgb_indicator_engine_test PRIVATE
+    ${RGB_COMPONENT_DIR}/include
+)
 
-if(MSVC)
-    target_compile_options(water_reminder_test PRIVATE /W4 /WX)
-else()
-    target_compile_options(water_reminder_test PRIVATE
-        -Wall -Wextra -Werror -pedantic
-    )
-endif()
+add_executable(vibration_patterns_test
+    vibration_patterns_test.c
+    ${FEEDBACK_COMPONENT_DIR}/feedback_player.c
+    ${FEEDBACK_COMPONENT_DIR}/vibration_patterns.c
+)
+target_include_directories(vibration_patterns_test PRIVATE
+    ${FEEDBACK_COMPONENT_DIR}/include
+    ${FEEDBACK_COMPONENT_DIR}
+)
 
-add_test(NAME water_reminder_test COMMAND water_reminder_test)
+add_executable(status_led_pattern_test
+    status_led_pattern_test.c
+    ${STATUS_LED_COMPONENT_DIR}/status_led_pattern.c
+)
+target_include_directories(status_led_pattern_test PRIVATE
+    ${STATUS_LED_COMPONENT_DIR}/include
+)
 
 add_executable(startup_service_test
     startup_service_test.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/startup_service/startup_service.c
+    ${STARTUP_COMPONENT_DIR}/startup_service.c
 )
-
 target_include_directories(startup_service_test PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/startup_service/include
+    ${STARTUP_COMPONENT_DIR}/include
 )
 
-target_compile_features(startup_service_test PRIVATE c_std_11)
+foreach(stock_test IN ITEMS
+        stock_intraday_parser_test
+        stock_intraday_seed_test
+        stock_quote_parser_test
+        stock_monitor_state_test
+        stock_monitor_alert_test
+        stock_decision_test
+        stock_monitor_visual_test
+        stock_monitor_ui_test
+        stock_analyzer_core_test
+        stock_market_core_test
+        rgb_indicator_engine_test
+        vibration_patterns_test
+        status_led_pattern_test
+        startup_service_test)
+    configure_stock_test(${stock_test})
+endforeach()
 
-if(MSVC)
-    target_compile_options(startup_service_test PRIVATE /W4 /WX)
-else()
-    target_compile_options(startup_service_test PRIVATE
-        -Wall -Wextra -Werror -pedantic
-    )
+if(NOT MSVC)
+    target_link_libraries(stock_intraday_parser_test PRIVATE m)
+    target_link_libraries(stock_intraday_seed_test PRIVATE m)
+    target_link_libraries(stock_monitor_visual_test PRIVATE m)
+    target_link_libraries(stock_monitor_alert_test PRIVATE m)
+    target_link_libraries(stock_decision_test PRIVATE m)
+    target_link_libraries(stock_monitor_ui_test PRIVATE m)
+    target_link_libraries(stock_analyzer_core_test PRIVATE m)
+    target_link_libraries(stock_market_core_test PRIVATE m)
 endif()
-
-add_test(NAME startup_service_test COMMAND startup_service_test)

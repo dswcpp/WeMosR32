@@ -292,6 +292,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                 ESP_LOGW(TAG, "station connect request failed: %s",
                          esp_err_to_name(err));
                 fail_station_attempt("无法发起 Wi-Fi 连接");
+            } else {
+                (void)app_events_publish(
+                    APP_EVENT_WIFI_STATION_CONNECTING,
+                    APP_EVENT_SOURCE_WIFI, APP_EVENT_SEVERITY_INFO, 0, 0, 0);
             }
         }
         break;
@@ -639,6 +643,9 @@ esp_err_t wifi_manager_connect_station(const char *ssid,
         return err;
     }
 
+    (void)app_events_publish(
+        APP_EVENT_WIFI_STATION_CONNECTING, APP_EVENT_SOURCE_WIFI,
+        APP_EVENT_SEVERITY_INFO, 0, 0, 0);
     ESP_LOGI(TAG, "station connection requested for %s", ssid);
     return ESP_OK;
 }

@@ -1,5 +1,6 @@
 #include "app_config.h"
 #include "app_events.h"
+#include "button_service.h"
 #include "config_service.h"
 #include <stddef.h>
 
@@ -13,17 +14,18 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "http_api.h"
+#include "rgb_indicator.h"
 #include "startup_service.h"
+#include "status_led.h"
+#include "stock_monitor.h"
+#include "stock_service.h"
 #include "time_service.h"
-#include "weather_service.h"
-#include "wellness_monitor.h"
 #include "wifi_manager.h"
 
 static const char *TAG = "app";
 
 #define HTTP_API_START_ATTEMPTS 3u
 #define HTTP_API_START_RETRY_DELAY_MS 250u
-#define FATAL_STARTUP_LOG_DELAY_MS 3000u
 
 static uint32_t now_ms(void)
 {
@@ -96,21 +98,216 @@ static esp_err_t run_ready_service(startup_service_id_t service,
     return err;
 }
 
-static void restart_after_fatal_error(startup_service_id_t service,
-                                      esp_err_t err)
+static void start_status_led_service(const app_config_t *config)
 {
-    startup_snapshot_t snapshot;
+    esp_err_t err;
 
-    startup_service_finish(now_ms());
-    startup_service_get_snapshot(&snapshot);
-    ESP_LOGE(TAG, "boot-critical service %s failed: %s",
-             startup_service_name(service), esp_err_to_name(err));
-    ESP_LOGE(TAG, "startup blocked after %lu ms; restarting",
-             (unsigned long)snapshot.duration_ms);
+    if (!config->board.status_led_enabled) {
+        record_service(STARTUP_SERVICE_STATUS_LED,
+                       STARTUP_SERVICE_DISABLED, ESP_OK);
+        return;
+    }
 
-    /* Leave enough time for the failure trail to reach the serial console. */
-    vTaskDelay(pdMS_TO_TICKS(FATAL_STARTUP_LOG_DELAY_MS));
-    esp_restart();
+    const status_led_config_t status_led_config = {
+        .gpio = config->board.status_led_gpio,
+        .active_high = config->board.status_led_active_high,
+    };
+
+    mark_starting(STARTUP_SERVICE_STATUS_LED);
+    err = status_led_service_start(&status_led_config);
+    record_service(STARTUP_SERVICE_STATUS_LED,
+                   err == ESP_OK ? STARTUP_SERVICE_READY
+                                 : STARTUP_SERVICE_FAILED,
+                   err);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "board status LED unavailable: %s",
+                 esp_err_to_name(err));
+    }
+}
+
+static void start_indicator_service(const app_config_t *config)
+{
+    esp_err_t err;
+
+    if (!config->board.rgb_led_enabled) {
+        record_service(STARTUP_SERVICE_INDICATOR,
+                       STARTUP_SERVICE_DISABLED, ESP_OK);
+        return;
+    }
+
+    const rgb_indicator_config_t rgb_config = {
+        .enabled = true,
+        .red_gpio = config->board.rgb_red_gpio,
+        .green_gpio = config->board.rgb_green_gpio,
+        .blue_gpio = config->board.rgb_blue_gpio,
+    };
+
+    mark_starting(STARTUP_SERVICE_INDICATOR);
+    err = rgb_indicator_init(&rgb_config);
+    record_service(STARTUP_SERVICE_INDICATOR,
+                   err == ESP_OK ? STARTUP_SERVICE_READY
+                                 : STARTUP_SERVICE_FAILED,
+                   err);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "RGB light-language service unavailable: %s",
+                 esp_err_to_name(err));
+    }
+}
+
+static void start_feedback_service(const app_config_t *config)
+{
+    const feedback_service_config_t feedback_config = {
+        .buzzer_enabled = config->board.buzzer_enabled,
+        .buzzer_gpio = config->board.buzzer_gpio,
+        .vibration_enabled = config->board.vibration_enabled,
+        .vibration_gpio = config->board.vibration_gpio,
+    };
+    feedback_service_snapshot_t feedback_snapshot = {0};
+    esp_err_t err;
+
+    if (!config->board.enabled) {
+        record_service(STARTUP_SERVICE_FEEDBACK,
+                       STARTUP_SERVICE_DISABLED, ESP_OK);
+        return;
+    }
+
+    mark_starting(STARTUP_SERVICE_FEEDBACK);
+    err = feedback_service_start(&feedback_config);
+    (void)feedback_service_get_snapshot(&feedback_snapshot);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "feedback service partially unavailable: %s",
+                 esp_err_to_name(err));
+    }
+    record_service(
+        STARTUP_SERVICE_FEEDBACK,
+        err == ESP_OK
+            ? STARTUP_SERVICE_READY
+            : feedback_snapshot.buzzer_ready ||
+                      feedback_snapshot.vibration_ready
+                  ? STARTUP_SERVICE_DEGRADED
+                  : STARTUP_SERVICE_FAILED,
+        err);
+}
+
+static void start_local_services(const app_config_t *config)
+{
+    const button_service_config_t button_config = {
+        .gpio = {
+            config->board.button_gpio[0],
+            config->board.button_gpio[1],
+            config->board.button_gpio[2],
+            config->board.button_gpio[3],
+        },
+        .active_low = config->board.button_active_low,
+        .debounce_ms = 25u,
+        .long_press_ms = 800u,
+    };
+    esp_err_t err;
+
+    if (!config->board.enabled) {
+        record_service(STARTUP_SERVICE_STOCK,
+                       STARTUP_SERVICE_DISABLED, ESP_OK);
+        record_service(STARTUP_SERVICE_BUTTONS,
+                       STARTUP_SERVICE_DISABLED, ESP_OK);
+        record_service(STARTUP_SERVICE_MONITOR,
+                       STARTUP_SERVICE_DISABLED, ESP_OK);
+        return;
+    }
+
+    err = run_ready_service(STARTUP_SERVICE_STOCK, stock_service_start);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "stock service start failed: %s",
+                 esp_err_to_name(err));
+    }
+
+    mark_starting(STARTUP_SERVICE_BUTTONS);
+    err = button_service_start(&button_config);
+    record_service(STARTUP_SERVICE_BUTTONS,
+                   err == ESP_OK ? STARTUP_SERVICE_READY
+                                 : STARTUP_SERVICE_FAILED,
+                   err);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "button service start failed: %s",
+                 esp_err_to_name(err));
+    }
+
+    err = run_ready_service(STARTUP_SERVICE_MONITOR, stock_monitor_start);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "stock monitor start failed: %s",
+                 esp_err_to_name(err));
+    }
+}
+
+static void start_wifi_service(const app_config_t *config)
+{
+    esp_err_t err;
+
+    startup_service_set_stage(STARTUP_STAGE_NETWORK);
+    mark_starting(STARTUP_SERVICE_WIFI);
+    err = wifi_manager_init(&config->wifi);
+    if (err == ESP_OK) {
+        err = wifi_manager_start();
+    }
+    record_service(STARTUP_SERVICE_WIFI,
+                   err == ESP_OK ? STARTUP_SERVICE_READY
+                                 : STARTUP_SERVICE_FAILED,
+                   err);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "Wi-Fi unavailable; continuing in local degraded mode: %s",
+                 esp_err_to_name(err));
+        return;
+    }
+
+    wifi_manager_status_t wifi_status;
+
+    wifi_manager_get_status(&wifi_status);
+    if (wifi_status.connected) {
+        rgb_indicator_set_network_state(
+            RGB_INDICATOR_NETWORK_CONNECTED);
+    } else if (wifi_status.connecting) {
+        rgb_indicator_set_network_state(
+            RGB_INDICATOR_NETWORK_CONNECTING);
+    } else if (!wifi_status.configured) {
+        rgb_indicator_set_network_state(
+            RGB_INDICATOR_NETWORK_LOCAL_AP);
+    } else {
+        rgb_indicator_set_network_state(
+            RGB_INDICATOR_NETWORK_DISCONNECTED);
+    }
+}
+
+static void start_http_service(const app_config_t *config)
+{
+    esp_err_t err = ESP_OK;
+
+    if (!config->http_server_enabled) {
+        record_service(STARTUP_SERVICE_HTTP,
+                       STARTUP_SERVICE_DISABLED, ESP_OK);
+        return;
+    }
+
+    startup_service_set_stage(STARTUP_STAGE_HTTP);
+    mark_starting(STARTUP_SERVICE_HTTP);
+    for (size_t attempt = 1u; attempt <= HTTP_API_START_ATTEMPTS; attempt++) {
+        err = http_api_start();
+        if (err == ESP_OK) {
+            break;
+        }
+        ESP_LOGW(TAG, "HTTP start attempt %u/%u failed: %s",
+                 (unsigned)attempt, (unsigned)HTTP_API_START_ATTEMPTS,
+                 esp_err_to_name(err));
+        if (attempt < HTTP_API_START_ATTEMPTS) {
+            vTaskDelay(pdMS_TO_TICKS(HTTP_API_START_RETRY_DELAY_MS));
+        }
+    }
+    record_service(STARTUP_SERVICE_HTTP,
+                   err == ESP_OK ? STARTUP_SERVICE_READY
+                                 : STARTUP_SERVICE_FAILED,
+                   err);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "HTTP API unavailable: %s", esp_err_to_name(err));
+    }
 }
 
 static void log_chip_info(void)
@@ -155,124 +352,64 @@ void app_main(void)
     esp_err_t err;
 
     startup_service_begin(now_ms(), reset_reason);
+    config = app_config_get();
     ESP_LOGI(TAG, "boot reset reason: %s",
              startup_reset_reason_name(reset_reason));
+    ESP_LOGI(TAG, "starting %s", config->device_name);
+    log_chip_info();
 
     startup_service_set_stage(STARTUP_STAGE_CORE);
+    start_status_led_service(config);
+
     err = run_ready_service(STARTUP_SERVICE_CONFIG, config_service_init);
     if (err != ESP_OK) {
         ESP_LOGE(TAG,
-                 "configuration storage unavailable; continuing in degraded "
-                 "mode: %s",
+                 "configuration storage unavailable; entering safe mode: %s",
                  esp_err_to_name(err));
     }
     err = run_ready_service(STARTUP_SERVICE_EVENTS, app_events_init);
     if (err != ESP_OK) {
-        restart_after_fatal_error(STARTUP_SERVICE_EVENTS, err);
-    }
-    config = app_config_get();
-
-    ESP_LOGI(TAG, "starting %s", config->device_name);
-    log_chip_info();
-
-    startup_service_set_stage(STARTUP_STAGE_NETWORK);
-    mark_starting(STARTUP_SERVICE_WIFI);
-    err = wifi_manager_init(&config->wifi);
-    if (err == ESP_OK) {
-        err = wifi_manager_start();
-    }
-    record_service(STARTUP_SERVICE_WIFI,
-                   err == ESP_OK ? STARTUP_SERVICE_READY
-                                 : STARTUP_SERVICE_FAILED,
-                   err);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Wi-Fi unavailable; continuing in local degraded mode: "
-                      "%s",
+        ESP_LOGE(TAG, "event dispatcher unavailable; entering safe mode: %s",
                  esp_err_to_name(err));
     }
 
-    startup_service_set_stage(STARTUP_STAGE_TIME);
+    start_indicator_service(config);
+    start_feedback_service(config);
+
+    startup_service_set_stage(STARTUP_STAGE_LOCAL);
+    start_local_services(config);
+
+    start_wifi_service(config);
+    start_http_service(config);
+
+    startup_service_set_stage(STARTUP_STAGE_BACKGROUND);
     err = run_ready_service(STARTUP_SERVICE_TIME, time_service_init);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "time service unavailable: %s", esp_err_to_name(err));
     }
 
-    startup_service_set_stage(STARTUP_STAGE_SERVICES);
-    err = run_ready_service(STARTUP_SERVICE_WEATHER, weather_service_init);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "weather service unavailable: %s",
-                 esp_err_to_name(err));
-    }
-
-    if (config->wellness.enabled) {
-        const feedback_service_config_t feedback_config = {
-            .buzzer_enabled = config->wellness.buzzer_enabled,
-            .buzzer_gpio = config->wellness.buzzer_gpio,
-            .vibration_enabled = config->wellness.vibration_enabled,
-            .vibration_gpio = config->wellness.vibration_gpio,
-        };
-
-        feedback_service_snapshot_t feedback_snapshot = {0};
-        esp_err_t feedback_err;
-
-        mark_starting(STARTUP_SERVICE_FEEDBACK);
-        feedback_err = feedback_service_start(&feedback_config);
-        (void)feedback_service_get_snapshot(&feedback_snapshot);
-        if (feedback_err != ESP_OK) {
-            ESP_LOGW(TAG, "feedback service partially unavailable: %s",
-                     esp_err_to_name(feedback_err));
-        }
-        record_service(
-            STARTUP_SERVICE_FEEDBACK,
-            feedback_err == ESP_OK
-                ? STARTUP_SERVICE_READY
-                : feedback_snapshot.buzzer_ready ||
-                          feedback_snapshot.vibration_ready
-                      ? STARTUP_SERVICE_DEGRADED
-                      : STARTUP_SERVICE_FAILED,
-            feedback_err);
-
-        err = run_ready_service(
-            STARTUP_SERVICE_WELLNESS, wellness_monitor_start);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "wellness monitor start failed: %s",
-                     esp_err_to_name(err));
-        }
-    } else {
-        record_service(STARTUP_SERVICE_FEEDBACK,
-                       STARTUP_SERVICE_DISABLED, ESP_OK);
-        record_service(STARTUP_SERVICE_WELLNESS,
-                       STARTUP_SERVICE_DISABLED, ESP_OK);
-    }
-
-    if (config->http_server_enabled) {
-        startup_service_set_stage(STARTUP_STAGE_HTTP);
-        mark_starting(STARTUP_SERVICE_HTTP);
-        for (size_t attempt = 1u; attempt <= HTTP_API_START_ATTEMPTS;
-             attempt++) {
-            err = http_api_start();
-            if (err == ESP_OK) {
-                break;
-            }
-            ESP_LOGW(TAG, "HTTP start attempt %u/%u failed: %s",
-                     (unsigned)attempt, (unsigned)HTTP_API_START_ATTEMPTS,
-                     esp_err_to_name(err));
-            if (attempt < HTTP_API_START_ATTEMPTS) {
-                vTaskDelay(pdMS_TO_TICKS(HTTP_API_START_RETRY_DELAY_MS));
-            }
-        }
-        record_service(STARTUP_SERVICE_HTTP,
-                       err == ESP_OK ? STARTUP_SERVICE_READY
-                                     : STARTUP_SERVICE_FAILED,
-                       err);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "HTTP API unavailable: %s", esp_err_to_name(err));
-        }
-    } else {
-        record_service(STARTUP_SERVICE_HTTP,
-                       STARTUP_SERVICE_DISABLED, ESP_OK);
-    }
-
     startup_service_finish(now_ms());
+    {
+        startup_snapshot_t final_snapshot;
+
+        startup_service_get_snapshot(&final_snapshot);
+        rgb_indicator_set_system_state(
+            final_snapshot.state == STARTUP_STATE_READY
+                ? RGB_INDICATOR_SYSTEM_READY
+                : RGB_INDICATOR_SYSTEM_DEGRADED);
+        if (final_snapshot.state == STARTUP_STATE_READY) {
+            status_led_service_set_mode(STATUS_LED_MODE_READY);
+        } else if (final_snapshot.state == STARTUP_STATE_SAFE_MODE ||
+                   final_snapshot.state == STARTUP_STATE_FAILED) {
+            status_led_service_set_mode(STATUS_LED_MODE_ERROR);
+        } else {
+            status_led_service_set_mode(STATUS_LED_MODE_DEGRADED);
+        }
+        if (final_snapshot.state != STARTUP_STATE_READY) {
+            (void)app_events_publish(
+                APP_EVENT_SYSTEM_DEGRADED, APP_EVENT_SOURCE_SYSTEM,
+                APP_EVENT_SEVERITY_WARNING, final_snapshot.state, 0, 0);
+        }
+    }
     log_startup_summary();
 }

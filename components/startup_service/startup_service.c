@@ -35,7 +35,7 @@ static bool service_id_valid(startup_service_id_t service)
            service < STARTUP_SERVICE_COUNT;
 }
 
-static bool service_is_boot_critical(startup_service_id_t service)
+static bool service_requires_safe_mode(startup_service_id_t service)
 {
     return service == STARTUP_SERVICE_CONFIG ||
            service == STARTUP_SERVICE_EVENTS;
@@ -155,8 +155,9 @@ bool startup_service_record(startup_service_id_t service,
         }
     }
 
-    if (service_is_boot_critical(service) &&
+    if (service_requires_safe_mode(service) &&
         record->state == STARTUP_SERVICE_FAILED) {
+        s_snapshot.safe_mode = true;
         may_continue = false;
     }
     unlock_context();
@@ -167,7 +168,6 @@ void startup_service_finish(uint32_t now_ms)
 {
     lock_context();
     startup_snapshot_t *snapshot = &s_snapshot;
-    bool failed = false;
     bool degraded = false;
 
     if (snapshot->complete) {
@@ -178,11 +178,8 @@ void startup_service_finish(uint32_t now_ms)
     for (size_t index = 0u; index < STARTUP_SERVICE_COUNT; index++) {
         const startup_service_record_t *record = &snapshot->services[index];
 
-        if (service_is_boot_critical((startup_service_id_t)index) &&
-            record->state != STARTUP_SERVICE_READY) {
-            failed = true;
-        } else if (record->state != STARTUP_SERVICE_READY &&
-                   record->state != STARTUP_SERVICE_DISABLED) {
+        if (record->state != STARTUP_SERVICE_READY &&
+            record->state != STARTUP_SERVICE_DISABLED) {
             degraded = true;
         }
     }
@@ -191,17 +188,16 @@ void startup_service_finish(uint32_t now_ms)
     snapshot->finished_ms = now_ms;
     snapshot->duration_ms =
         (uint32_t)(now_ms - snapshot->started_ms);
-    snapshot->blocked = failed;
-    snapshot->degraded = !failed && degraded;
-    if (failed) {
-        snapshot->state = STARTUP_STATE_FAILED;
+    snapshot->blocked = false;
+    snapshot->degraded = !snapshot->safe_mode && degraded;
+    if (snapshot->safe_mode) {
+        snapshot->state = STARTUP_STATE_SAFE_MODE;
     } else if (degraded) {
         snapshot->state = STARTUP_STATE_DEGRADED;
-        snapshot->stage = STARTUP_STAGE_READY;
     } else {
         snapshot->state = STARTUP_STATE_READY;
-        snapshot->stage = STARTUP_STAGE_READY;
     }
+    snapshot->stage = STARTUP_STAGE_READY;
     unlock_context();
 }
 
@@ -225,6 +221,8 @@ const char *startup_state_name(startup_state_t state)
         return "ready";
     case STARTUP_STATE_DEGRADED:
         return "degraded";
+    case STARTUP_STATE_SAFE_MODE:
+        return "safe_mode";
     case STARTUP_STATE_FAILED:
         return "failed";
     default:
@@ -257,14 +255,14 @@ const char *startup_service_stage_name(startup_stage_t stage)
     switch (stage) {
     case STARTUP_STAGE_CORE:
         return "core";
+    case STARTUP_STAGE_LOCAL:
+        return "local";
     case STARTUP_STAGE_NETWORK:
         return "network";
-    case STARTUP_STAGE_TIME:
-        return "time";
-    case STARTUP_STAGE_SERVICES:
-        return "services";
     case STARTUP_STAGE_HTTP:
         return "http";
+    case STARTUP_STAGE_BACKGROUND:
+        return "background";
     case STARTUP_STAGE_READY:
         return "ready";
     default:
@@ -279,16 +277,22 @@ const char *startup_service_name(startup_service_id_t service)
         return "config";
     case STARTUP_SERVICE_EVENTS:
         return "events";
+    case STARTUP_SERVICE_STATUS_LED:
+        return "status_led";
+    case STARTUP_SERVICE_INDICATOR:
+        return "indicator";
     case STARTUP_SERVICE_WIFI:
         return "wifi";
     case STARTUP_SERVICE_TIME:
         return "time";
-    case STARTUP_SERVICE_WEATHER:
-        return "weather";
+    case STARTUP_SERVICE_STOCK:
+        return "stock";
     case STARTUP_SERVICE_FEEDBACK:
         return "feedback";
-    case STARTUP_SERVICE_WELLNESS:
-        return "wellness";
+    case STARTUP_SERVICE_BUTTONS:
+        return "buttons";
+    case STARTUP_SERVICE_MONITOR:
+        return "monitor";
     case STARTUP_SERVICE_HTTP:
         return "http";
     default:
