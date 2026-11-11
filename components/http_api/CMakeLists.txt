@@ -1,18 +1,14 @@
 idf_component_register(
-    SRCS "http_api.c"
+    SRCS "config_api.c"
     INCLUDE_DIRS "include"
     REQUIRES
         app_config
-        bootloader_support
+        app_events
+        button_service
         config_service
         esp_http_server
-        esp_timer
         json
-        rgb_indicator
-        startup_service
-        time_service
-        weather_service
-        wellness_monitor
+        stock_service
         wifi_manager
     EMBED_FILES
         "www/manifest.webmanifest"
