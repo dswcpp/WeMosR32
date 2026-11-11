@@ -36,35 +36,10 @@ typedef struct {
 } config_service_wifi_record_t;
 
 static const config_service_blob_spec_t s_blob_specs[] = {
-    [CONFIG_SERVICE_ITEM_CARE_SETTINGS] = {
-        .namespace_name = "wellness_cfg",
+    [CONFIG_SERVICE_ITEM_STOCK_SETTINGS] = {
+        .namespace_name = "stock_cfg",
         .key = "settings",
-        .max_size = CONFIG_SERVICE_BLOB_MAX_CARE_SETTINGS,
-    },
-    [CONFIG_SERVICE_ITEM_CARE_DAILY] = {
-        .namespace_name = "wellness_cfg",
-        .key = "daily",
-        .max_size = CONFIG_SERVICE_BLOB_MAX_CARE_DAILY,
-    },
-    [CONFIG_SERVICE_ITEM_RGB_SETTINGS] = {
-        .namespace_name = "wellness_cfg",
-        .key = "rgb",
-        .max_size = CONFIG_SERVICE_BLOB_MAX_RGB_SETTINGS,
-    },
-    [CONFIG_SERVICE_ITEM_WEATHER_SETTINGS] = {
-        .namespace_name = "weather_cfg",
-        .key = "settings",
-        .max_size = CONFIG_SERVICE_BLOB_MAX_WEATHER_SETTINGS,
-    },
-    [CONFIG_SERVICE_ITEM_WEATHER_CACHE] = {
-        .namespace_name = "weather_cfg",
-        .key = "cache",
-        .max_size = CONFIG_SERVICE_BLOB_MAX_WEATHER_CACHE,
-    },
-    [CONFIG_SERVICE_ITEM_WEB_SETTINGS] = {
-        .namespace_name = "web_cfg",
-        .key = "pages",
-        .max_size = CONFIG_SERVICE_BLOB_MAX_WEB_SETTINGS,
+        .max_size = CONFIG_SERVICE_BLOB_MAX_STOCK_SETTINGS,
     },
 };
 

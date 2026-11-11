@@ -1,0 +1,22 @@
+idf_component_register(
+    SRCS
+        "stock_monitor_alert.c"
+        "stock_decision.c"
+        "stock_monitor_state.c"
+        "stock_monitor.c"
+        "stock_monitor_ui.c"
+        "stock_monitor_visual.c"
+    INCLUDE_DIRS "include"
+    REQUIRES
+        app_config
+        app_events
+        button_service
+        feedback_service
+        oled_display
+        rgb_indicator
+        stock_service
+        time_service
+    PRIV_REQUIRES
+        esp_timer
+        freertos
+)
