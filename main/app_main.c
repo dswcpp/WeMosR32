@@ -18,6 +18,7 @@
 #include "weather_service.h"
 #include "wellness_monitor.h"
 #include "wifi_manager.h"
+#include "workstation_light.h"
 
 static const char *TAG = "app";
 
@@ -28,6 +29,18 @@ static const char *TAG = "app";
 static uint32_t now_ms(void)
 {
     return (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+static bool read_workstation_presence(bool *present, void *context)
+{
+    wellness_snapshot_t snapshot;
+
+    (void)context;
+    if (present == NULL || !wellness_monitor_get_snapshot(&snapshot)) {
+        return false;
+    }
+    *present = snapshot.pir_present;
+    return true;
 }
 
 static startup_reset_reason_t reset_reason_from_esp(
@@ -242,6 +255,42 @@ void app_main(void)
         record_service(STARTUP_SERVICE_FEEDBACK,
                        STARTUP_SERVICE_DISABLED, ESP_OK);
         record_service(STARTUP_SERVICE_WELLNESS,
+                       STARTUP_SERVICE_DISABLED, ESP_OK);
+    }
+
+    if (config->workstation_light.enabled) {
+        const workstation_light_config_t light_config = {
+            .enabled = config->workstation_light.enabled,
+            .power_gpio = config->workstation_light.power_gpio,
+            .brightness_gpio = config->workstation_light.brightness_gpio,
+            .color_gpio = config->workstation_light.color_gpio,
+            .active_low = config->workstation_light.active_low,
+            .pulse_ms = config->workstation_light.pulse_ms,
+            .settle_ms = config->workstation_light.settle_ms,
+            .presence_auto = config->workstation_light.presence_auto,
+            .presence_led_enabled =
+                config->workstation_light.presence_led_enabled,
+            .presence_led_gpio =
+                config->workstation_light.presence_led_gpio,
+            .presence_led_active_low =
+                config->workstation_light.presence_led_active_low,
+            .presence_provider = read_workstation_presence,
+            .presence_context = NULL,
+        };
+
+        mark_starting(STARTUP_SERVICE_WORKSTATION_LIGHT);
+        err = workstation_light_init(&light_config);
+        record_service(
+            STARTUP_SERVICE_WORKSTATION_LIGHT,
+            err == ESP_OK ? STARTUP_SERVICE_READY
+                          : STARTUP_SERVICE_FAILED,
+            err);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "workstation light unavailable: %s",
+                     esp_err_to_name(err));
+        }
+    } else {
+        record_service(STARTUP_SERVICE_WORKSTATION_LIGHT,
                        STARTUP_SERVICE_DISABLED, ESP_OK);
     }
 

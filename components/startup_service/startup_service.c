@@ -289,6 +289,8 @@ const char *startup_service_name(startup_service_id_t service)
         return "feedback";
     case STARTUP_SERVICE_WELLNESS:
         return "wellness";
+    case STARTUP_SERVICE_WORKSTATION_LIGHT:
+        return "workstation_light";
     case STARTUP_SERVICE_HTTP:
         return "http";
     default:

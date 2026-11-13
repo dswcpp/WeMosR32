@@ -115,6 +115,24 @@ menu "WeMos R32 application"
         default 100000
         depends on APP_WELLNESS_ENABLED
 
+    choice APP_OLED_CONTROLLER
+        prompt "OLED controller"
+        default APP_OLED_CONTROLLER_SH1106
+        depends on APP_WELLNESS_ENABLED
+        help
+            Select the controller used by the 128x64 OLED module. Most 1.3
+            inch I2C modules use SH1106. SSD1306 and SSD1315-compatible
+            modules use the SSD1306 command set. This cannot be identified
+            reliably over I2C, so select the controller from the module
+            listing or board documentation.
+
+        config APP_OLED_CONTROLLER_SSD1306
+            bool "SSD1306 or SSD1315 compatible"
+
+        config APP_OLED_CONTROLLER_SH1106
+            bool "SH1106"
+    endchoice
+
     config APP_BUZZER_ENABLED
         bool "Enable active buzzer feedback"
         default y
@@ -161,13 +179,13 @@ menu "WeMos R32 application"
     config APP_RGB_LED_RED_GPIO
         int "RGB red GPIO"
         range 0 39
-        default 32
+        default 4
         depends on APP_RGB_LED_ENABLED
 
     config APP_RGB_LED_GREEN_GPIO
         int "RGB green GPIO"
         range 0 39
-        default 33
+        default 19
         depends on APP_RGB_LED_ENABLED
 
     config APP_RGB_LED_BLUE_GPIO
@@ -175,6 +193,60 @@ menu "WeMos R32 application"
         range 0 39
         default 18
         depends on APP_RGB_LED_ENABLED
+
+    config APP_BUTTONS_ENABLED
+        bool "Enable four workstation control keys"
+        default y
+        depends on APP_WELLNESS_ENABLED
+        help
+            Enables four active-low keys used with the integrated OLED panel.
+            The keys remain independent from the desk lamp panel controls.
+            K1 acknowledges feedback, K2 records or removes water, K3 controls
+            temporary mute and the alert mode, and K4 selects the OLED page.
+
+    config APP_BUTTON_ACK_GPIO
+        int "K1 acknowledge GPIO"
+        range 0 39
+        default 32
+        depends on APP_BUTTONS_ENABLED
+
+    config APP_BUTTON_WATER_GPIO
+        int "K2 water GPIO"
+        range 0 39
+        default 33
+        depends on APP_BUTTONS_ENABLED
+
+    config APP_BUTTON_MUTE_GPIO
+        int "K3 mute GPIO"
+        range 0 39
+        default 34
+        depends on APP_BUTTONS_ENABLED
+        help
+            GPIO34 is input-only and has no internal pull-up on ESP32. Fit an
+            external 10 kOhm pull-up to 3.3 V unless the button board already
+            provides one.
+
+    config APP_BUTTON_PAGE_GPIO
+        int "K4 display page GPIO"
+        range 0 39
+        default 35
+        depends on APP_BUTTONS_ENABLED
+        help
+            GPIO35 is input-only and has no internal pull-up on ESP32. Fit an
+            external 10 kOhm pull-up to 3.3 V unless the button board already
+            provides one.
+
+    config APP_BUTTON_DEBOUNCE_MS
+        int "Key debounce interval in milliseconds"
+        range 10 100
+        default 25
+        depends on APP_BUTTONS_ENABLED
+
+    config APP_BUTTON_LONG_PRESS_MS
+        int "Key long-press interval in milliseconds"
+        range 500 5000
+        default 1500
+        depends on APP_BUTTONS_ENABLED
 
     config APP_SEDENTARY_INITIAL_MINUTES
         int "First sedentary alert after minutes"
@@ -199,5 +271,98 @@ menu "WeMos R32 application"
         range 5 300
         default 30
         depends on APP_WELLNESS_ENABLED
+
+    config APP_WORKSTATION_LIGHT_ENABLED
+        bool "Enable workstation desk light relay controller"
+        default y
+        help
+            Controls a desk lamp through the first three inputs of a
+            four-channel relay module. All three relay contacts are momentary
+            and are wired in parallel with the lamp panel's low-voltage power,
+            brightness, and color-temperature buttons. The fourth relay is
+            intentionally not configured.
+
+    config APP_WORKSTATION_LIGHT_POWER_GPIO
+        int "Desk light power relay GPIO"
+        range 0 39
+        default 13
+        depends on APP_WORKSTATION_LIGHT_ENABLED
+        help
+            GPIO connected to relay input IN1. The default avoids peripherals
+            already configured by the application and ESP32 flash pins.
+
+    config APP_WORKSTATION_LIGHT_BRIGHTNESS_GPIO
+        int "Desk light brightness relay GPIO"
+        range 0 39
+        default 14
+        depends on APP_WORKSTATION_LIGHT_ENABLED
+
+    config APP_WORKSTATION_LIGHT_COLOR_GPIO
+        int "Desk light color relay GPIO"
+        range 0 39
+        default 23
+        depends on APP_WORKSTATION_LIGHT_ENABLED
+
+    config APP_WORKSTATION_LIGHT_RELAY_ACTIVE_LOW
+        bool "Relay inputs are active low"
+        default y
+        depends on APP_WORKSTATION_LIGHT_ENABLED
+        help
+            Most low-cost relay modules close the contact when an input is
+            pulled low. Disable this for active-high relay boards.
+
+    config APP_WORKSTATION_LIGHT_PULSE_MS
+        int "Desk light button pulse duration in milliseconds"
+        range 40 1000
+        default 180
+        depends on APP_WORKSTATION_LIGHT_ENABLED
+        help
+            All three relays are momentary outputs. Keep the pulse short enough
+            to emulate the lamp's panel buttons.
+
+    config APP_WORKSTATION_LIGHT_SETTLE_MS
+        int "Desk light button release gap in milliseconds"
+        range 40 1000
+        default 160
+        depends on APP_WORKSTATION_LIGHT_ENABLED
+
+    config APP_WORKSTATION_LIGHT_PRESENCE_AUTO
+        bool "Turn the desk light on while PIR reports presence"
+        default y
+        depends on APP_WORKSTATION_LIGHT_ENABLED && APP_WELLNESS_ENABLED
+        help
+            Pulses relay 1 when the wellness PIR starts reporting presence and
+            pulses it again after the presence hold expires. The wellness
+            monitor currently holds presence for 120 seconds after the last
+            motion. Manual HTTP controls remain available and are not
+            continuously overridden while the presence state is unchanged.
+
+    config APP_WORKSTATION_LIGHT_PRESENCE_LED_ENABLED
+        bool "Mirror PIR presence on the onboard status LED"
+        default y
+        depends on APP_WORKSTATION_LIGHT_ENABLED && APP_WELLNESS_ENABLED
+        help
+            Uses the development board's software-controlled LED as a local
+            PIR indicator. On the black Wemos D1 R32 board the controllable
+            red LED is connected to GPIO2 and is active high, while the blue
+            LED is the 3.3 V power indicator. Disable this option when the
+            board does not provide a controllable LED.
+
+    config APP_WORKSTATION_LIGHT_PRESENCE_LED_GPIO
+        int "Onboard status LED GPIO"
+        range 0 39
+        default 2
+        depends on APP_WORKSTATION_LIGHT_PRESENCE_LED_ENABLED
+        help
+            GPIO connected to the onboard software-controlled LED. GPIO2 is
+            used by most ESP32-WROOM-32 and Wemos D1 R32 development boards.
+
+    config APP_WORKSTATION_LIGHT_PRESENCE_LED_ACTIVE_LOW
+        bool "Onboard status LED is active low"
+        default n
+        depends on APP_WORKSTATION_LIGHT_PRESENCE_LED_ENABLED
+        help
+            Enable this when the LED turns on with a low GPIO level. This is
+            not the usual wiring on the black Wemos D1 R32 board.
 
 endmenu

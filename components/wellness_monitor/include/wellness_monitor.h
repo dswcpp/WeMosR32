@@ -24,6 +24,9 @@ typedef struct {
 
     bool oled_ready;
     uint8_t oled_address;
+    const char *oled_controller;
+    const char *oled_page;
+    bool oled_manual_page;
 
     bool sedentary_active;
     bool sedentary_present;
@@ -32,7 +35,10 @@ typedef struct {
     const char *sedentary_phase;
     bool beeping;
     bool vibrating;
+    bool feedback_active;
     uint8_t beep_count;
+    bool temporary_mute_active;
+    uint32_t temporary_mute_remaining_ms;
     uint32_t sitting_elapsed_ms;
     uint32_t next_reminder_ms;
     uint32_t break_remaining_ms;

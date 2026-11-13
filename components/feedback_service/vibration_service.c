@@ -13,20 +13,22 @@
 static const char *TAG = "vibration";
 
 static const feedback_pulse_t WATER_PULSES[] = {
-    {220u, 180u},
-    {220u, 0u},
+    {700u, 250u},
+    {700u, 0u},
 };
 static const feedback_pulse_t SEDENTARY_PULSES[] = {
-    {300u, 200u},
-    {300u, 0u},
+    {800u, 250u},
+    {800u, 250u},
+    {800u, 0u},
 };
 static const feedback_pulse_t ESCALATED_PULSES[] = {
-    {350u, 180u},
-    {350u, 180u},
-    {350u, 0u},
+    {900u, 250u},
+    {900u, 250u},
+    {900u, 250u},
+    {900u, 0u},
 };
 static const feedback_pulse_t CONFIRM_PULSES[] = {
-    {100u, 0u},
+    {300u, 0u},
 };
 
 static const feedback_pattern_t s_patterns[] = {

@@ -15,11 +15,13 @@ typedef struct {
     int sda_gpio;
     int scl_gpio;
     uint32_t clock_hz;
+    bool sh1106;
 } ssd1306_config_t;
 
 esp_err_t ssd1306_init(const ssd1306_config_t *config);
 bool ssd1306_is_ready(void);
 uint8_t ssd1306_address(void);
+const char *ssd1306_controller_name(void);
 void ssd1306_clear(void);
 void ssd1306_fill_rect(int x, int y, int width, int height, bool color);
 void ssd1306_draw_text(int x, int y, const char *text, bool color);

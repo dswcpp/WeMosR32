@@ -18,12 +18,14 @@
 #include "weather_service.h"
 #include "wellness_monitor.h"
 #include "wifi_manager.h"
+#include "workstation_light.h"
 
 static const char *TAG = "http_api";
 static httpd_handle_t s_server;
 
 #define HTTP_API_JSON_BODY_MAX 768
-#define WEB_SETTINGS_BLOB_VERSION 1u
+#define WEB_SETTINGS_BLOB_VERSION 2u
+#define WEB_SETTINGS_BLOB_LEGACY_VERSION 1u
 
 typedef enum {
     WEB_PAGE_CLOCK = 0,
@@ -33,6 +35,7 @@ typedef enum {
     WEB_PAGE_PRESENCE,
     WEB_PAGE_TODAY_CARE,
     WEB_PAGE_WEATHER,
+    WEB_PAGE_WORKSTATION_LIGHT,
     WEB_PAGE_COUNT,
 } web_page_t;
 
@@ -56,6 +59,7 @@ static const char *const s_web_page_names[WEB_PAGE_COUNT] = {
     [WEB_PAGE_PRESENCE] = "presence",
     [WEB_PAGE_TODAY_CARE] = "today_care",
     [WEB_PAGE_WEATHER] = "weather",
+    [WEB_PAGE_WORKSTATION_LIGHT] = "workstation",
 };
 
 static uint8_t s_web_page_mask = WEB_PAGE_ALL_MASK;
@@ -90,14 +94,22 @@ static esp_err_t load_web_page_settings(void)
 
     if (err == ESP_OK && found &&
         (size != sizeof(blob) ||
-         blob.version != WEB_SETTINGS_BLOB_VERSION ||
+         (blob.version != WEB_SETTINGS_BLOB_VERSION &&
+          blob.version != WEB_SETTINGS_BLOB_LEGACY_VERSION) ||
          !is_valid_web_page_mask(blob.page_mask))) {
         ESP_LOGW(TAG, "saved web page settings are invalid; using defaults");
         err = ESP_ERR_INVALID_VERSION;
     }
 
-    s_web_page_mask =
-        err == ESP_OK && found ? blob.page_mask : WEB_PAGE_ALL_MASK;
+    if (err == ESP_OK && found) {
+        s_web_page_mask = blob.page_mask;
+        if (blob.version == WEB_SETTINGS_BLOB_LEGACY_VERSION) {
+            s_web_page_mask |=
+                (uint8_t)(1u << (uint32_t)WEB_PAGE_WORKSTATION_LIGHT);
+        }
+    } else {
+        s_web_page_mask = WEB_PAGE_ALL_MASK;
+    }
     return err;
 }
 
@@ -454,6 +466,79 @@ static bool add_led_object(cJSON *parent, const char *name, bool configured)
     return true;
 }
 
+static bool add_workstation_light_object(cJSON *parent,
+                                         bool configured)
+{
+    workstation_light_snapshot_t light = {
+        .last_action = WORKSTATION_LIGHT_ACTION_POWER_OFF,
+        .presence_led_gpio = -1,
+    };
+    cJSON *workstation;
+    cJSON *object;
+    cJSON *color_modes;
+    static const char *const color_mode_names[] = {
+        "cool",
+        "warm",
+        "mixed",
+    };
+    bool initialized = workstation_light_get_snapshot(&light);
+
+    if (parent == NULL) {
+        return false;
+    }
+
+    workstation = cJSON_AddObjectToObject(parent, "workstation");
+    if (workstation == NULL) {
+        return false;
+    }
+    object = cJSON_AddObjectToObject(workstation, "light");
+    if (object == NULL) {
+        return false;
+    }
+
+    cJSON_AddBoolToObject(object, "enabled", configured);
+    cJSON_AddBoolToObject(object, "ready", initialized && light.ready);
+    cJSON_AddBoolToObject(object, "power", light.power_on);
+    cJSON_AddBoolToObject(object, "busy", light.busy);
+    cJSON_AddBoolToObject(object, "active_low", light.active_low);
+    cJSON_AddBoolToObject(object, "presence_auto", light.presence_auto);
+    cJSON_AddBoolToObject(object, "presence_known", light.presence_known);
+    cJSON_AddBoolToObject(object, "presence", light.presence);
+    cJSON_AddBoolToObject(object, "presence_led_enabled",
+                          light.presence_led_enabled);
+    cJSON_AddBoolToObject(object, "presence_led_on",
+                          light.presence_led_on);
+    cJSON_AddNumberToObject(object, "presence_led_gpio",
+                            light.presence_led_gpio);
+    cJSON_AddBoolToObject(object, "last_action_automatic",
+                          light.last_action_automatic);
+    cJSON_AddNumberToObject(object, "brightness_levels", 4);
+    cJSON_AddNumberToObject(object, "color_mode_count", 3);
+    cJSON_AddNumberToObject(object, "pulse_ms", light.pulse_ms);
+    cJSON_AddNumberToObject(object, "settle_ms", light.settle_ms);
+    cJSON_AddNumberToObject(object, "brightness_cycles",
+                            light.brightness_cycles);
+    cJSON_AddNumberToObject(object, "color_cycles", light.color_cycles);
+    cJSON_AddStringToObject(
+        object, "last_action",
+        workstation_light_action_name(light.last_action));
+    color_modes = cJSON_AddArrayToObject(object, "color_modes");
+    if (color_modes == NULL) {
+        return false;
+    }
+    for (size_t index = 0u;
+         index < sizeof(color_mode_names) / sizeof(color_mode_names[0]);
+         index++) {
+        cJSON *item = cJSON_CreateString(color_mode_names[index]);
+
+        if (item == NULL) {
+            return false;
+        }
+        cJSON_AddItemToArray(color_modes, item);
+    }
+    return true;
+}
+
 static esp_err_t send_json_response(httpd_req_t *request, cJSON *root)
 {
     char *payload;
@@ -646,6 +731,11 @@ static esp_err_t status_get_handler(httpd_req_t *request)
         cJSON_Delete(root);
         return httpd_resp_send_500(request);
     }
+    if (!add_workstation_light_object(
+            root, config->workstation_light.enabled)) {
+        cJSON_Delete(root);
+        return httpd_resp_send_500(request);
+    }
     if (!add_startup_object(root)) {
         cJSON_Delete(root);
         return httpd_resp_send_500(request);
@@ -672,6 +762,17 @@ static esp_err_t status_get_handler(httpd_req_t *request)
                             wellness_snapshot.sht30_bad_frames);
     cJSON_AddBoolToObject(oled, "ready", wellness_snapshot.oled_ready);
     cJSON_AddNumberToObject(oled, "address", wellness_snapshot.oled_address);
+    cJSON_AddStringToObject(
+        oled, "controller",
+        wellness_snapshot.oled_controller != NULL
+            ? wellness_snapshot.oled_controller
+            : "unknown");
+    cJSON_AddStringToObject(
+        oled, "page",
+        wellness_snapshot.oled_page != NULL ? wellness_snapshot.oled_page
+                                            : "auto");
+    cJSON_AddBoolToObject(oled, "manual_page",
+                          wellness_snapshot.oled_manual_page);
 
     cJSON_AddBoolToObject(sedentary, "active",
                           wellness_snapshot.sedentary_active);
@@ -688,6 +789,13 @@ static esp_err_t status_get_handler(httpd_req_t *request)
                           wellness_snapshot.beeping);
     cJSON_AddBoolToObject(sedentary, "vibrating",
                           wellness_snapshot.vibrating);
+    cJSON_AddBoolToObject(sedentary, "feedback_active",
+                          wellness_snapshot.feedback_active);
+    cJSON_AddBoolToObject(sedentary, "temporary_mute_active",
+                          wellness_snapshot.temporary_mute_active);
+    cJSON_AddNumberToObject(
+        sedentary, "temporary_mute_remaining_seconds",
+        wellness_snapshot.temporary_mute_remaining_ms / 1000u);
     cJSON_AddNumberToObject(sedentary, "beep_count",
                             wellness_snapshot.beep_count);
     cJSON_AddNumberToObject(
@@ -740,6 +848,16 @@ static esp_err_t status_get_handler(httpd_req_t *request)
                             config->wellness.rgb_green_gpio);
     cJSON_AddNumberToObject(wellness_settings, "rgb_blue_gpio",
                             config->wellness.rgb_blue_gpio);
+    cJSON_AddBoolToObject(wellness_settings, "buttons_enabled",
+                          config->wellness.buttons_enabled);
+    cJSON_AddNumberToObject(wellness_settings, "button_ack_gpio",
+                            config->wellness.button_gpios[0]);
+    cJSON_AddNumberToObject(wellness_settings, "button_water_gpio",
+                            config->wellness.button_gpios[1]);
+    cJSON_AddNumberToObject(wellness_settings, "button_mute_gpio",
+                            config->wellness.button_gpios[2]);
+    cJSON_AddNumberToObject(wellness_settings, "button_page_gpio",
+                            config->wellness.button_gpios[3]);
     if (!add_led_object(wellness, "led",
                         config->wellness.rgb_led_enabled)) {
         cJSON_Delete(root);
@@ -1395,6 +1513,94 @@ static esp_err_t led_post_handler(httpd_req_t *request)
     return send_json_response(request, response);
 }
 
+static bool parse_workstation_light_action(
+    const char *name, workstation_light_action_t *action)
+{
+    if (name == NULL || action == NULL) {
+        return false;
+    }
+    if (strcmp(name, "power_on") == 0) {
+        *action = WORKSTATION_LIGHT_ACTION_POWER_ON;
+    } else if (strcmp(name, "power_off") == 0) {
+        *action = WORKSTATION_LIGHT_ACTION_POWER_OFF;
+    } else if (strcmp(name, "toggle_power") == 0) {
+        *action = WORKSTATION_LIGHT_ACTION_TOGGLE_POWER;
+    } else if (strcmp(name, "brightness_next") == 0) {
+        *action = WORKSTATION_LIGHT_ACTION_BRIGHTNESS_NEXT;
+    } else if (strcmp(name, "color_next") == 0) {
+        *action = WORKSTATION_LIGHT_ACTION_COLOR_NEXT;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+static esp_err_t workstation_light_post_handler(httpd_req_t *request)
+{
+    const app_config_t *config = app_config_get();
+    workstation_light_snapshot_t current;
+    workstation_light_action_t action;
+    cJSON *root = NULL;
+    cJSON *action_item;
+    cJSON *response;
+    esp_err_t err;
+
+    ESP_LOGI(TAG, "POST %s", request->uri);
+    if (!workstation_light_get_snapshot(&current)) {
+        send_json_error(request, "409 Conflict", "workstation_light_unavailable",
+                        "工位台灯继电器尚未初始化或当前固件未启用");
+        return ESP_OK;
+    }
+
+    err = receive_json_body(request, &root);
+    if (err != ESP_OK) {
+        set_http_status_for_error(request, err, "invalid_json",
+                                  "请求不是有效的 JSON");
+        return ESP_OK;
+    }
+    if (!cJSON_IsObject(root)) {
+        cJSON_Delete(root);
+        send_json_error(request, "400 Bad Request", "invalid_json",
+                        "请求内容必须是 JSON 对象");
+        return ESP_OK;
+    }
+
+    action_item = cJSON_GetObjectItemCaseSensitive(root, "action");
+    if (!cJSON_IsString(action_item) ||
+        action_item->valuestring == NULL ||
+        !parse_workstation_light_action(action_item->valuestring,
+                                        &action)) {
+        cJSON_Delete(root);
+        send_json_error(
+            request, "400 Bad Request", "invalid_light_action",
+            "action 必须是 power_on、power_off、toggle_power、"
+            "brightness_next 或 color_next");
+        return ESP_OK;
+    }
+
+    cJSON_Delete(root);
+    err = workstation_light_execute(action);
+    if (err != ESP_OK) {
+        set_http_status_for_error(request, err, "light_action_failed",
+                                  "无法执行台灯继电器操作");
+        return ESP_OK;
+    }
+
+    response = cJSON_CreateObject();
+    if (response == NULL) {
+        return httpd_resp_send_500(request);
+    }
+    cJSON_AddBoolToObject(response, "ok", true);
+    cJSON_AddStringToObject(response, "action",
+                            workstation_light_action_name(action));
+    if (!add_workstation_light_object(
+            response, config->workstation_light.enabled)) {
+        cJSON_Delete(response);
+        return httpd_resp_send_500(request);
+    }
+    return send_json_response(request, response);
+}
+
 static esp_err_t send_static_content(httpd_req_t *request, const uint8_t *data,
                                      size_t size)
 {
@@ -1410,7 +1616,7 @@ static esp_err_t root_get_handler(httpd_req_t *request)
              (unsigned)page_size);
     httpd_resp_set_type(request, "text/html; charset=utf-8");
     httpd_resp_set_hdr(request, "Cache-Control", "no-store");
-    httpd_resp_set_hdr(request, "X-Web-Build", "2026.11.09-r31");
+    httpd_resp_set_hdr(request, "X-Web-Build", "2026.11.13-r32");
     httpd_resp_set_hdr(request, "Content-Security-Policy",
                        "default-src 'self'; style-src 'self' 'unsafe-inline'; "
                        "script-src 'self' 'unsafe-inline'; connect-src 'self'; "
@@ -1521,6 +1727,13 @@ static const httpd_uri_t s_led_uri = {
     .user_ctx = NULL,
 };
 
+static const httpd_uri_t s_workstation_light_uri = {
+    .uri = "/api/v1/workstation/light",
+    .method = HTTP_POST,
+    .handler = workstation_light_post_handler,
+    .user_ctx = NULL,
+};
+
 static const httpd_uri_t s_wifi_scan_uri = {
     .uri = "/api/v1/wifi/scan",
     .method = HTTP_GET,
@@ -1566,7 +1779,7 @@ esp_err_t http_api_start(void)
 
     config.stack_size = 6144;
     config.max_open_sockets = 4;
-    config.max_uri_handlers = 14;
+    config.max_uri_handlers = 16;
     config.max_resp_headers = 12;
     config.recv_wait_timeout = 10;
     config.send_wait_timeout = 30;
@@ -1658,6 +1871,15 @@ esp_err_t http_api_start(void)
     err = httpd_register_uri_handler(s_server, &s_led_uri);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "LED URI registration failed: %s",
+                 esp_err_to_name(err));
+        httpd_stop(s_server);
+        s_server = NULL;
+        return err;
+    }
+
+    err = httpd_register_uri_handler(s_server, &s_workstation_light_uri);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "workstation light URI registration failed: %s",
                  esp_err_to_name(err));
         httpd_stop(s_server);
         s_server = NULL;

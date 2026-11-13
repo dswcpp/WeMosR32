@@ -11,13 +11,13 @@ extern "C" {
 
 typedef enum {
     VIBRATION_PATTERN_NONE = 0,
-    /* Water: two 220 ms pulses separated by 180 ms. */
+    /* Water: two 700 ms pulses separated by 250 ms. */
     VIBRATION_PATTERN_WATER_REMINDER,
-    /* Sedentary: two 300 ms pulses separated by 200 ms. */
+    /* Sedentary: three 800 ms pulses separated by 250 ms. */
     VIBRATION_PATTERN_SEDENTARY_ALERT,
-    /* Escalation: three 350 ms pulses separated by 180 ms. */
+    /* Escalation: four 900 ms pulses separated by 250 ms. */
     VIBRATION_PATTERN_SEDENTARY_ESCALATED,
-    /* Confirmation: one short 100 ms pulse. */
+    /* Confirmation: one 300 ms pulse. */
     VIBRATION_PATTERN_CONFIRM,
 } vibration_pattern_t;
 

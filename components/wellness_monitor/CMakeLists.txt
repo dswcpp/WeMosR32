@@ -1,6 +1,8 @@
 idf_component_register(
     SRCS
         "wellness_monitor.c"
+        "button_input.c"
+        "button_service.c"
         "pir_input.c"
         "pir_service.c"
         "sht30_uart.c"

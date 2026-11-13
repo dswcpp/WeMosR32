@@ -12,16 +12,17 @@
    STA+SoftAP mode.
 5. Start time synchronization, the weather refresh task, the feedback services,
    and the wellness monitor.
-6. Start the HTTP status API with up to three attempts.
-7. Finish the startup snapshot and return from `app_main`; ESP-IDF and FreeRTOS
+6. Initialize the workstation desk-light relay controller.
+7. Start the HTTP status API with up to three attempts.
+8. Finish the startup snapshot and return from `app_main`; ESP-IDF and FreeRTOS
    continue running the system tasks.
 
 Only `config_service` and `app_events` are boot-critical. A failure there records
 the failed stage, waits briefly so the serial log can be captured, and performs
-a controlled restart. Wi-Fi, time, weather, feedback, wellness, and HTTP failures
-remain visible as failed service records while the rest of the device continues
-in degraded mode. Feedback can additionally be `degraded` when only one output
-device is available.
+a controlled restart. Wi-Fi, time, weather, feedback, wellness, workstation
+light, and HTTP failures remain visible as failed service records while the rest
+of the device continues in degraded mode. Feedback can additionally be
+`degraded` when only one output device is available.
 
 Disabling a feature records `disabled`; it is not treated as a boot failure.
 Pending or starting services make the final snapshot degraded, which catches
@@ -108,7 +109,8 @@ Only one scene is played at a time. Business priority is escalation, first
 sedentary alert, then water reminder, so two reminders cannot stack into a
 continuous or confusing output. Patterns use bounded pulses rather than long
 continuous drive. The longest buzzer pulse is 160 ms, the longest motor pulse
-is 350 ms, and the longest complete motor pattern is 1410 ms.
+is 900 ms, and the longest complete motor pattern is 4350 ms with 250 ms rest
+gaps between bursts.
 
 `care_coordinator` owns cross-domain scene priority. The actuator services never
 inspect sedentary, water, or care state. This keeps the buzzer and motor
@@ -125,12 +127,35 @@ pir_input -> pir_service -> sedentary_reminder --------+
 care_guidance -> water_reminder -> care_coordinator ---+-> feedback_service
                                       |
                                       +-> RGB and display policy inputs
+
+button_input -> button_service -> wellness actions and OLED page selection
 ```
 
 `pir_input` is the GPIO adapter. `pir_service` owns sampling cadence, debounce,
 stable motion edges, the 120-second presence hold, and presence-expiration
 events. Consumers see only `motion`, `present`, counters, and time remaining.
 This prevents every business module from rebuilding its own PIR filtering.
+
+`button_input` is the four-key GPIO adapter. `button_service` owns active-low
+input masks, 25 ms debounce, stable press state, and release-time short/long
+classification. The wellness task translates those events into feedback
+acknowledgement, water progress, temporary mute, persistent alert-mode
+selection, and OLED page policy. The key panel remains independent from the
+desk-lamp relay controller, so a display or wellness failure cannot change the
+lamp's own button behavior.
+
+The default keys are `K1=GPIO32`, `K2=GPIO33`, `K3=GPIO34`, and `K4=GPIO35`.
+GPIO34 and GPIO35 are input-only pins without internal pull-ups on ESP32 and
+therefore require external 10 kOhm pull-ups to 3.3 V. All keys pull to ground
+when pressed. A long press is emitted only after release, which prevents an
+action from repeating while the key is held.
+
+The OLED adapter uses the same 128x64 framebuffer for both supported controller
+families. The build-time controller selection configures either native
+SSD1306 addressing or the SH1106 132-column RAM layout with a two-column
+offset. The 1.3-inch default is SH1106. Address probing tries `0x3C` before
+`0x3D`, and controller selection remains separate from I2C wiring because the
+controller cannot be identified reliably by address alone.
 
 `sedentary_reminder` remains a pure state machine driven by stable motion
 evidence. `care_guidance` owns caregiver settings, daily progress, water
@@ -177,13 +202,56 @@ mutable state fields. Physical output is not part of the sedentary state
 machine. The coordinator selects a care scene, and the wellness task adapts it
 to the feedback service.
 
+Manual OLED pages are runtime state and are intentionally not persisted. This
+avoids restoring a diagnostic page such as environment or weather after a
+reboot when the automatic care summary is the safer default. Temporary mute is
+also runtime-only and expires after 30 minutes; the long-press alert mode is
+part of care settings and is persisted through `config_service`.
+
+### `workstation_light`
+
+Owns the first three inputs of a four-channel relay module and exposes a small
+serialized action API. Relays 1, 2, and 3 are momentary outputs on `GPIO13`,
+`GPIO14`, and `GPIO23`, intended to close across the low-voltage power,
+brightness, and color-temperature buttons of the lamp panel. The fourth relay
+is deliberately unconfigured.
+
+The component drives all outputs to their released level before enabling them
+as outputs, then holds all three relays off on every boot. A mutex serializes
+actions so two HTTP requests cannot overlap pulses. Relay 2 advances through
+four brightness steps; relay 3 advances through cool, warm, and mixed color
+modes. Relay 1 pulses once whenever the assumed lamp power state changes.
+Snapshots expose that assumed power state, busy state, pulse timing, and cycle
+counters. They intentionally do not infer the lamp panel's actual power,
+brightness, or color state because the relay interface has no feedback path.
+These values are runtime state only and are not persisted in NVS.
+
+Presence automation is implemented as a small workstation task with an
+injected presence-provider callback. `app_main` supplies the wellness monitor's
+stable `pir_present` value, so the relay component does not depend on the
+wellness component directly. The task samples every 500 ms and changes relay 1
+only when presence changes: present pulses the power button, and presence
+expiration pulses it again. The existing PIR service holds presence for 120
+seconds after the last motion. Manual relay actions remain serialized with
+automatic actions.
+
+The same presence sample drives the black Wemos D1 R32 board's red software LED
+on `GPIO2`, active high. The blue 3.3 V power LED is hard-wired and remains
+uncontrollable. The status LED mirrors presence independently of relay
+automation, so it is useful for checking PIR behavior even when automatic lamp
+switching is disabled. Firmware initialization leaves it off before the first
+PIR sample. GPIO and polarity are configurable because clone boards
+occasionally use a different LED circuit.
+
 ### `http_api`
 
 Provides an embedded mobile status homepage and local JSON endpoints over the
 active interfaces. Mutable settings are handled by their owning feature
 component and persisted through `config_service`; OTA endpoints are not
 implemented. The web UI includes a weather card and weather settings, with
-fullscreen and landscape carousel modes for mobile use. Dashboard card
+fullscreen and landscape carousel modes for mobile use. It also includes a
+workstation-light card that calls the serialized relay action endpoint.
+Dashboard card
 visibility is validated by `http_api`, persisted through `config_service` as a
 versioned blob under `web_cfg/pages`, and reported to the UI through
 `web.pages` in the status response. At least one card must remain enabled.

@@ -8,12 +8,12 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="WeMosR32">
+  <meta name="apple-mobile-web-app-title" content="智能工位">
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="app-build" content="2026.11.09-r31">
-  <title>WeMosR32 主动关怀</title>
+  <title>智能工位 · 主动关怀</title>
   <link rel="manifest" href="/manifest.webmanifest?v=2026.11.09-r31">
   <link rel="icon" type="image/svg+xml" href="/icon.svg?v=2026.11.09-r31">
   <style>
@@ -3090,12 +3090,6 @@
       flex: 0 0 6px;
       border-radius: 50%;
       background: var(--accent);
-    }
-
-    .footer-build {
-      flex: 0 0 auto;
-      color: var(--muted);
-      opacity: 0.78;
     }
 
     .page-footer[data-state="offline"] .footer-state::before {
@@ -7146,15 +7140,8 @@
       }
     }
 
-    .page-footer,
-    #deviceAddress {
+    .page-footer {
       min-width: 0;
-    }
-
-    #deviceAddress {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     @media (max-width: 340px) {
@@ -7197,7 +7184,8 @@
 
       .dashboard-track .presence-panel,
       .dashboard-track .today-care-slide,
-      .dashboard-track .weather-slide {
+      .dashboard-track .weather-slide,
+      .dashboard-track .workstation-slide {
         grid-area: auto;
         grid-column: 1 / -1;
         grid-row: auto;
@@ -9632,6 +9620,262 @@
       }
     }
 
+    .workstation-body {
+      display: grid;
+      grid-template-columns: minmax(190px, 0.82fr) minmax(0, 1.18fr);
+      gap: 14px;
+      padding: 18px;
+    }
+
+    .workstation-power,
+    .workstation-action {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      color: var(--ink);
+      text-align: left;
+    }
+
+    .workstation-power {
+      min-height: 148px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px;
+    }
+
+    .workstation-power[aria-pressed="true"] {
+      border-color: var(--warning);
+      background: var(--warning-soft);
+    }
+
+    .workstation-power-icon {
+      width: 54px;
+      height: 54px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 54px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+    }
+
+    .workstation-power[aria-pressed="true"] .workstation-power-icon {
+      border-color: rgba(255, 209, 102, 0.55);
+      color: var(--warning);
+    }
+
+    .workstation-power-icon svg,
+    .workstation-action-icon svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    .workstation-power-copy,
+    .workstation-action-copy {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
+    .workstation-power-copy span,
+    .workstation-action-copy small {
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .workstation-power-copy strong {
+      font-size: 26px;
+      line-height: 1.15;
+    }
+
+    .workstation-actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    .workstation-action {
+      min-height: 69px;
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 12px 14px;
+    }
+
+    .workstation-action:hover:not(:disabled),
+    .workstation-power:hover:not(:disabled) {
+      border-color: var(--accent);
+    }
+
+    .workstation-action:active:not(:disabled),
+    .workstation-power:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    .workstation-action:disabled,
+    .workstation-power:disabled {
+      cursor: not-allowed;
+      opacity: 0.52;
+    }
+
+    .workstation-action-icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 42px;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+
+    .workstation-action-copy strong {
+      font-size: 19px;
+      line-height: 1.2;
+    }
+
+    .workstation-feedback {
+      min-height: 24px;
+      grid-column: 1 / -1;
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    .workstation-feedback[data-state="online"] {
+      color: var(--accent-strong);
+    }
+
+    .workstation-feedback[data-state="waiting"] {
+      color: var(--warning);
+    }
+
+    .workstation-feedback[data-state="offline"] {
+      color: var(--danger);
+    }
+
+    @media (max-width: 560px) {
+      .workstation-body {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 14px;
+      }
+
+      .workstation-power {
+        min-height: 96px;
+      }
+
+      .workstation-feedback {
+        grid-column: auto;
+      }
+    }
+
+    .advanced-device-info {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .advanced-device-info > summary {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 16px;
+      color: var(--muted);
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .advanced-device-info > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .advanced-device-info > summary::after {
+      content: "";
+      width: 8px;
+      height: 8px;
+      flex: 0 0 8px;
+      border-right: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      transform: rotate(45deg);
+      transition: transform 160ms ease;
+    }
+
+    .advanced-device-info[open] > summary {
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
+    }
+
+    .advanced-device-info[open] > summary::after {
+      transform: rotate(225deg);
+    }
+
+    .advanced-device-info > summary:hover {
+      background: var(--surface-soft);
+      color: var(--ink);
+    }
+
+    .display-card {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    @media (min-width: 760px) {
+      .display-card {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .header-actions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .header-actions > *,
+      .header-actions .device-info-button,
+      .header-actions .connection-badge {
+        min-width: 0;
+        max-width: 100%;
+      }
+
+      .connection-badge,
+      .device-info-button,
+      #wellnessSettingsButton {
+        overflow: hidden;
+        padding-right: 8px;
+        padding-left: 8px;
+      }
+
+      .connection-badge #connectionText,
+      .device-info-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .device-info-button svg {
+        width: 20px;
+        height: 20px;
+        flex-basis: 20px;
+      }
+
+      .device-dialog .system-panel .panel-heading {
+        padding-right: 64px;
+      }
+
+      .device-dialog .system-panel .panel-title {
+        font-size: 20px;
+        white-space: nowrap;
+      }
+
+      .device-dialog .system-panel .panel-tag {
+        display: none;
+      }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
@@ -9658,9 +9902,8 @@
           </svg>
         </div>
         <div class="brand-copy">
-          <p class="brand-kicker">ESP32 Device</p>
-          <h1 id="deviceName">WeMosR32</h1>
-          <p class="brand-subtitle">久坐、喝水与作息关怀</p>
+          <h1 id="deviceName">智能工位</h1>
+          <p class="brand-subtitle">久坐、喝水与照明关怀</p>
         </div>
       </div>
 
@@ -9675,7 +9918,7 @@
           </svg>
           <span class="device-info-label">提醒</span>
         </button>
-        <button class="device-info-button" id="deviceInfoButton" type="button" aria-label="打开设备与网络" aria-haspopup="dialog" aria-controls="deviceInfoDialog" aria-expanded="false" title="设备与网络">
+        <button class="device-info-button" id="deviceInfoButton" type="button" aria-label="打开连接与设备信息" aria-haspopup="dialog" aria-controls="deviceInfoDialog" aria-expanded="false" title="连接与设备">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect width="18" height="12" x="3" y="5" rx="2"></rect>
             <path d="M7 21h10"></path>
@@ -9683,7 +9926,7 @@
             <path d="M7 10h.01"></path>
             <path d="M10.5 10h.01"></path>
           </svg>
-          <span class="device-info-label">设备</span>
+          <span class="device-info-label">连接</span>
         </button>
         <button class="icon-button refresh-button" id="refreshButton" type="button" aria-label="刷新设备状态" title="刷新设备状态">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -9699,7 +9942,7 @@
     <main>
       <section class="dashboard-carousel" id="dashboardCarousel" aria-label="设备信息卡片" aria-roledescription="carousel">
         <div class="dashboard-track" id="dashboardTrack" aria-live="off">
-        <section class="dashboard-slide clock-panel" data-page="clock" aria-labelledby="clockHeading" role="group" aria-roledescription="slide" aria-label="1 / 7 当前时间">
+        <section class="dashboard-slide clock-panel" data-page="clock" aria-labelledby="clockHeading" role="group" aria-roledescription="slide" aria-label="1 / 8 当前时间">
           <div class="clock-head">
             <h2 class="clock-kicker" id="clockHeading">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -9720,7 +9963,7 @@
           </div>
         </section>
 
-        <section class="dashboard-slide climate-grid" data-page="environment" aria-labelledby="environmentHeading" role="group" aria-roledescription="slide" aria-label="2 / 7 室内环境">
+        <section class="dashboard-slide climate-grid" data-page="environment" aria-labelledby="environmentHeading" role="group" aria-roledescription="slide" aria-label="2 / 8 室内环境">
           <div class="section-heading">
             <h2 id="environmentHeading">室内环境</h2>
             <span id="sensorUpdatedAt">等待同步</span>
@@ -9737,7 +9980,7 @@
                 温度
               </div>
               <p class="sensor-value" id="temperatureValue">--</p>
-              <p class="sensor-meta" id="temperatureMeta">等待 SHT30 数据</p>
+              <p class="sensor-meta" id="temperatureMeta">等待环境数据</p>
             </article>
 
             <article class="sensor-card climate-card" id="humidityCard" data-tone="info">
@@ -9750,12 +9993,12 @@
                 湿度
               </div>
               <p class="sensor-value" id="humidityValue">--</p>
-              <p class="sensor-meta" id="humidityMeta">等待 SHT30 数据</p>
+              <p class="sensor-meta" id="humidityMeta">等待环境数据</p>
             </article>
           </div>
         </section>
 
-        <section class="dashboard-slide hero" id="wellnessHero" data-page="sedentary" data-state="loading" aria-labelledby="wellnessHeading" role="group" aria-roledescription="slide" aria-label="3 / 7 久坐关怀">
+        <section class="dashboard-slide hero" id="wellnessHero" data-page="sedentary" data-state="loading" aria-labelledby="wellnessHeading" role="group" aria-roledescription="slide" aria-label="3 / 8 久坐关怀">
           <div class="hero-head">
             <h2 class="hero-kicker" id="wellnessHeading">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -9845,7 +10088,7 @@
           </div>
         </section>
 
-        <section class="dashboard-slide panel water-slide" id="waterSlide" data-page="water" aria-labelledby="waterHeading" role="group" aria-roledescription="slide" aria-label="4 / 7 喝水关怀">
+        <section class="dashboard-slide panel water-slide" id="waterSlide" data-page="water" aria-labelledby="waterHeading" role="group" aria-roledescription="slide" aria-label="4 / 8 喝水关怀">
           <div class="panel-heading">
             <h2 class="panel-title" id="waterHeading">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -9897,7 +10140,7 @@
           <p class="water-feedback" id="waterFeedback" role="status" aria-live="polite"></p>
         </section>
 
-        <section class="dashboard-slide presence-panel" data-page="presence" aria-labelledby="presenceHeading" role="group" aria-roledescription="slide" aria-label="5 / 7 在场与显示">
+        <section class="dashboard-slide presence-panel" data-page="presence" aria-labelledby="presenceHeading" role="group" aria-roledescription="slide" aria-label="5 / 8 在场与显示">
           <header class="presence-heading">
             <div class="presence-heading-copy">
               <p class="presence-kicker">
@@ -9930,7 +10173,7 @@
               <div class="presence-copy">
                 <span class="presence-label" id="pirLabel">人体活动</span>
                 <p class="presence-value" id="pirState" aria-live="polite">--</p>
-                <p class="presence-meta" id="pirMeta">PIR 等待数据</p>
+                <p class="presence-meta" id="pirMeta">等待人体感应数据</p>
               </div>
             </article>
 
@@ -9942,33 +10185,16 @@
                     <path d="M8 22h8"></path>
                     <path d="M12 18v4"></path>
                   </svg>
-                  OLED 显示
+                  显示屏状态
                 </span>
                 <p class="display-value" id="oledState" aria-live="polite">--</p>
                 <p class="display-meta" id="oledMeta">等待显示状态</p>
-              </div>
-              <div class="oled-preview" aria-hidden="true">
-                <div class="oled-frame">
-                  <div class="oled-screen">
-                    <span class="oled-screen-top">
-                      <span>WEMOS / 64</span>
-                      <span class="oled-signal"><i></i><i></i><i></i></span>
-                    </span>
-                    <span class="oled-screen-main">
-                      <strong>DISPLAY</strong>
-                      <small>128 × 64</small>
-                    </span>
-                    <span class="oled-wave">
-                      <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-                    </span>
-                  </div>
-                </div>
               </div>
             </article>
           </div>
         </section>
 
-        <section class="dashboard-slide panel today-care-slide" id="todayCareSlide" data-page="today_care" aria-labelledby="activityHeading" role="group" aria-roledescription="slide" aria-label="6 / 7 今日关怀">
+        <section class="dashboard-slide panel today-care-slide" id="todayCareSlide" data-page="today_care" aria-labelledby="activityHeading" role="group" aria-roledescription="slide" aria-label="6 / 8 今日关怀">
           <div class="panel-heading">
             <h2 class="panel-title" id="activityHeading">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -10021,7 +10247,7 @@
           </dl>
         </section>
 
-        <section class="dashboard-slide panel weather-slide" id="weatherSlide" data-page="weather" data-state="waiting" aria-labelledby="weatherHeading" role="group" aria-roledescription="slide" aria-label="7 / 7 室外天气">
+        <section class="dashboard-slide panel weather-slide" id="weatherSlide" data-page="weather" data-state="waiting" aria-labelledby="weatherHeading" role="group" aria-roledescription="slide" aria-label="7 / 8 室外天气">
           <div class="panel-heading">
             <h2 class="panel-title" id="weatherHeading">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -10129,6 +10355,77 @@
           </div>
         </section>
 
+        <section class="dashboard-slide panel workstation-slide" id="workstationSlide" data-page="workstation" aria-labelledby="workstationHeading" role="group" aria-roledescription="slide" aria-label="8 / 8 工位照明">
+          <div class="panel-heading">
+            <h2 class="panel-title" id="workstationHeading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 18h6"></path>
+                <path d="M10 22h4"></path>
+                <path d="M12 2v1"></path>
+                <path d="M4.2 6.2 5 7"></path>
+                <path d="M19 7l.8-.8"></path>
+                <path d="M5 13a7 7 0 0 1 14 0"></path>
+              </svg>
+              工位照明
+            </h2>
+            <span class="panel-tag" id="workstationTag" data-state="waiting">同步中</span>
+          </div>
+
+          <div class="workstation-body">
+            <button class="workstation-power" id="workstationPowerButton" type="button" aria-pressed="false" disabled>
+              <span class="workstation-power-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2v10"></path>
+                  <path d="M18.4 6.6a9 9 0 1 1-12.8 0"></path>
+                </svg>
+              </span>
+              <span class="workstation-power-copy">
+                <span>台灯电源</span>
+                <strong id="workstationPowerState">读取中</strong>
+                <small id="workstationPowerMeta">人体感应自动控制</small>
+              </span>
+            </button>
+
+            <div class="workstation-actions" aria-label="台灯模式控制">
+              <button class="workstation-action" id="workstationBrightnessButton" type="button" disabled>
+                <span class="workstation-action-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <path d="M12 2v2"></path>
+                    <path d="M12 20v2"></path>
+                    <path d="m4.93 4.93 1.42 1.42"></path>
+                    <path d="m17.65 17.65 1.42 1.42"></path>
+                    <path d="M2 12h2"></path>
+                    <path d="M20 12h2"></path>
+                    <path d="m6.35 17.65-1.42 1.42"></path>
+                    <path d="m19.07 4.93-1.42 1.42"></path>
+                  </svg>
+                </span>
+                <span class="workstation-action-copy">
+                  <strong>亮度切换</strong>
+                  <small>4 档循环</small>
+                </span>
+              </button>
+
+              <button class="workstation-action" id="workstationColorButton" type="button" disabled>
+                <span class="workstation-action-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22a7 7 0 0 0 7-7c0-4-3.5-8.5-7-12-3.5 3.5-7 8-7 12a7 7 0 0 0 7 7Z"></path>
+                    <path d="M8 14h8"></path>
+                    <path d="M9 18h6"></path>
+                  </svg>
+                </span>
+                <span class="workstation-action-copy">
+                  <strong>色温切换</strong>
+                  <small>冷色 / 暖色 / 混合</small>
+                </span>
+              </button>
+            </div>
+
+            <p class="workstation-feedback" id="workstationFeedback" role="status" aria-live="polite">正在读取台灯状态</p>
+          </div>
+        </section>
+
         </div>
 
         <nav class="carousel-controls" id="carouselControls" aria-label="卡片轮播控制">
@@ -10172,14 +10469,12 @@
 
     <footer class="page-footer" id="pageFooter" data-state="loading">
       <span class="footer-state" id="lastUpdated">正在读取设备状态</span>
-      <span class="mono footer-build" id="pageRevision" title="网页版本 2026.11.09-r31">WEB r31</span>
-      <span class="mono" id="deviceAddress">192.168.4.1</span>
     </footer>
   </div>
 
   <dialog class="device-dialog" id="deviceInfoDialog" aria-labelledby="systemHeading">
     <div class="device-dialog-shell">
-      <button class="icon-button device-dialog-close" id="deviceInfoCloseButton" type="button" aria-label="关闭设备与网络" title="关闭">
+      <button class="icon-button device-dialog-close" id="deviceInfoCloseButton" type="button" aria-label="关闭连接与设备" title="关闭">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M18 6 6 18"></path>
           <path d="m6 6 12 12"></path>
@@ -10195,51 +10490,54 @@
                 <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
                 <path d="M12 20h.01"></path>
               </svg>
-              设备与网络
+              连接与设备
             </h2>
             <span class="panel-tag" id="networkTag" data-state="waiting">同步中</span>
           </div>
           <div class="system-summary">
             <div>
               <h3 id="statusTitle">正在连接设备</h3>
-              <p id="statusDescription">正在读取局域网内的设备状态。</p>
+              <p id="statusDescription">正在读取工位设备连接状态。</p>
             </div>
             <span class="system-status" aria-hidden="true"></span>
           </div>
-          <dl class="facts-grid">
-            <div class="fact">
-              <dt>网络模式</dt>
-              <dd id="wifiMode">--</dd>
-            </div>
-            <div class="fact">
-              <dt>热点地址</dt>
-              <dd class="mono" id="softApIp">--</dd>
-            </div>
-            <div class="fact">
-              <dt>已接入设备</dt>
-              <dd id="clientCount">--</dd>
-            </div>
-            <div class="fact">
-              <dt>运行时间</dt>
-              <dd id="uptime">--</dd>
-            </div>
-            <div class="fact">
-              <dt>固件版本</dt>
-              <dd class="mono" id="version">--</dd>
-            </div>
-            <div class="fact">
-              <dt>热点名称</dt>
-              <dd id="softApSsid">--</dd>
-            </div>
-            <div class="fact">
-              <dt>上级网络</dt>
-              <dd class="is-muted" id="stationState">未启用</dd>
-            </div>
-            <div class="fact">
-              <dt>设备状态</dt>
-              <dd id="deviceState">连接中</dd>
-            </div>
-          </dl>
+          <details class="advanced-device-info">
+            <summary>高级信息</summary>
+            <dl class="facts-grid">
+              <div class="fact">
+                <dt>网络模式</dt>
+                <dd id="wifiMode">--</dd>
+              </div>
+              <div class="fact">
+                <dt>热点地址</dt>
+                <dd class="mono" id="softApIp">--</dd>
+              </div>
+              <div class="fact">
+                <dt>已接入设备</dt>
+                <dd id="clientCount">--</dd>
+              </div>
+              <div class="fact">
+                <dt>运行时间</dt>
+                <dd id="uptime">--</dd>
+              </div>
+              <div class="fact">
+                <dt>固件版本</dt>
+                <dd class="mono" id="version">--</dd>
+              </div>
+              <div class="fact">
+                <dt>热点名称</dt>
+                <dd id="softApSsid">--</dd>
+              </div>
+              <div class="fact">
+                <dt>上级网络</dt>
+                <dd class="is-muted" id="stationState">未启用</dd>
+              </div>
+              <div class="fact">
+                <dt>设备状态</dt>
+                <dd id="deviceState">连接中</dd>
+              </div>
+            </dl>
+          </details>
           <section class="wifi-settings" aria-labelledby="wifiSettingsHeading">
             <div class="wifi-settings-heading">
               <h3 id="wifiSettingsHeading">
@@ -10597,9 +10895,10 @@
         { key: "environment", label: "室内环境", description: "温湿度数据" },
         { key: "sedentary", label: "久坐关怀", description: "坐姿计时与提醒" },
         { key: "water", label: "喝水关怀", description: "饮水进度与记录" },
-        { key: "presence", label: "在场与显示", description: "人体活动与 OLED" },
+        { key: "presence", label: "在场与显示", description: "人体活动与显示屏" },
         { key: "today_care", label: "今日关怀", description: "今日状态汇总" },
-        { key: "weather", label: "室外天气", description: "Open-Meteo 天气" }
+        { key: "weather", label: "室外天气", description: "Open-Meteo 天气" },
+        { key: "workstation", label: "工位照明", description: "人来灯亮与色温控制" }
       ]);
       const WEB_PAGE_KEYS = WEB_PAGES.map((page) => page.key);
       const WEB_PAGE_LABELS = Object.fromEntries(
@@ -10741,6 +11040,14 @@
         weatherFeedback: document.getElementById("weatherFeedback"),
         weatherRefreshButton: document.getElementById("weatherRefreshButton"),
         weatherRefreshLabel: document.getElementById("weatherRefreshLabel"),
+        workstationSlide: document.getElementById("workstationSlide"),
+        workstationTag: document.getElementById("workstationTag"),
+        workstationPowerButton: document.getElementById("workstationPowerButton"),
+        workstationPowerState: document.getElementById("workstationPowerState"),
+        workstationPowerMeta: document.getElementById("workstationPowerMeta"),
+        workstationBrightnessButton: document.getElementById("workstationBrightnessButton"),
+        workstationColorButton: document.getElementById("workstationColorButton"),
+        workstationFeedback: document.getElementById("workstationFeedback"),
         sensorUpdatedAt: document.getElementById("sensorUpdatedAt"),
         temperatureCard: document.getElementById("temperatureCard"),
         temperatureValue: document.getElementById("temperatureValue"),
@@ -10797,7 +11104,6 @@
         wifiConnectButtonLabel: document.getElementById("wifiConnectButtonLabel"),
         pageFooter: document.getElementById("pageFooter"),
         lastUpdated: document.getElementById("lastUpdated"),
-        deviceAddress: document.getElementById("deviceAddress"),
         careAlertDialog: document.getElementById("careAlertDialog"),
         careAlertShell: document.getElementById("careAlertShell"),
         careAlertCloseButton: document.getElementById("careAlertCloseButton"),
@@ -10857,6 +11163,8 @@
       let webPageSettingsBusy = false;
       let webPageSettingsDirty = false;
       let waterBusy = false;
+      let workstationLightBusy = false;
+      let latestWorkstationLight = null;
       let phoneClockSyncing = false;
       let lastPhoneClockSyncAttempt = 0;
       let feedbackTimer = 0;
@@ -10939,13 +11247,6 @@
           return `${Math.floor(seconds)} 秒前`;
         }
         return `${Math.floor(seconds / 60)} 分钟前`;
-      }
-
-      function formatHexAddress(address) {
-        const number = Number(address);
-        return Number.isInteger(number) && number > 0
-          ? `0x${number.toString(16).toUpperCase().padStart(2, "0")}`
-          : "--";
       }
 
       function formatTime(date) {
@@ -11513,7 +11814,7 @@
       function describeTemperature(value) {
         const temperature = Number(value);
         if (!Number.isFinite(temperature)) {
-          return "状态未知";
+          return "暂不可用";
         }
         if (temperature < 18) {
           return "温度偏凉";
@@ -11527,7 +11828,7 @@
       function describeHumidity(value) {
         const humidity = Number(value);
         if (!Number.isFinite(humidity)) {
-          return "状态未知";
+          return "暂不可用";
         }
         if (humidity < 35) {
           return "空气偏干";
@@ -11746,7 +12047,7 @@
           elements.weatherTag.textContent = "服务未就绪";
           elements.weatherTag.dataset.state = "offline";
           elements.weatherGlyph.dataset.kind = "waiting";
-          setWeatherFeedback("天气服务尚未启动，请检查设备日志", "offline");
+          setWeatherFeedback("天气服务暂不可用，请稍后刷新", "offline");
           updateWeatherRefreshControl(true);
           return;
         }
@@ -11856,6 +12157,266 @@
         updateWeatherRefreshControl(
           deviceOffline || refreshing || weatherBusy
         );
+      }
+
+      function normalizeWorkstationLight(light) {
+        if (!light || typeof light !== "object") {
+          return null;
+        }
+        return {
+          enabled: Boolean(light.enabled),
+          ready: Boolean(light.ready),
+          power: Boolean(light.power),
+          busy: Boolean(light.busy),
+          activeLow: Boolean(light.active_low),
+          presenceAuto: Boolean(light.presence_auto),
+          presenceKnown: Boolean(light.presence_known),
+          presence: Boolean(light.presence),
+          lastActionAutomatic: Boolean(light.last_action_automatic),
+          brightnessLevels: Math.max(
+            1,
+            Math.round(Number(light.brightness_levels) || 4)
+          ),
+          colorModeCount: Math.max(
+            1,
+            Math.round(Number(light.color_mode_count) || 3)
+          ),
+          pulseMs: asNonNegativeNumber(light.pulse_ms),
+          settleMs: asNonNegativeNumber(light.settle_ms),
+          brightnessCycles: asNonNegativeNumber(light.brightness_cycles),
+          colorCycles: asNonNegativeNumber(light.color_cycles),
+          lastAction: typeof light.last_action === "string"
+            ? light.last_action
+            : "power_off"
+        };
+      }
+
+      function setWorkstationFeedback(message, state = "idle") {
+        elements.workstationFeedback.textContent = message;
+        elements.workstationFeedback.dataset.state = state;
+      }
+
+      function updateWorkstationControls() {
+        const light = latestWorkstationLight;
+        const busy = workstationLightBusy || Boolean(light && light.busy);
+        const unavailable = !light || !light.enabled || !light.ready;
+        const buttons = [
+          elements.workstationPowerButton,
+          elements.workstationBrightnessButton,
+          elements.workstationColorButton
+        ];
+
+        buttons.forEach((button) => {
+          button.disabled = busy || unavailable;
+          button.setAttribute("aria-busy", String(busy));
+        });
+        elements.workstationPowerButton.setAttribute(
+          "aria-pressed",
+          String(Boolean(light && light.power))
+        );
+
+        if (!light) {
+          elements.workstationPowerState.textContent = "未连接";
+          elements.workstationPowerMeta.textContent = "等待台灯状态";
+          elements.workstationTag.textContent = "等待设备";
+          elements.workstationTag.dataset.state = "waiting";
+          elements.workstationSlide.dataset.state = "waiting";
+          return;
+        }
+
+        if (!light.enabled) {
+          elements.workstationPowerState.textContent = "未启用";
+          elements.workstationPowerMeta.textContent = "台灯控制未启用";
+          elements.workstationTag.textContent = "未启用";
+          elements.workstationTag.dataset.state = "idle";
+          elements.workstationSlide.dataset.state = "idle";
+          return;
+        }
+
+        if (!light.ready) {
+          elements.workstationPowerState.textContent = "未就绪";
+          elements.workstationPowerMeta.textContent = "台灯控制暂不可用";
+          elements.workstationTag.textContent = "未就绪";
+          elements.workstationTag.dataset.state = "offline";
+          elements.workstationSlide.dataset.state = "offline";
+          return;
+        }
+
+        elements.workstationPowerState.textContent = light.power
+          ? "已开启"
+          : "已关闭";
+        const presenceText = light.presenceKnown
+          ? light.presence
+            ? "有人在场"
+            : "无人"
+          : "人体状态等待更新";
+        elements.workstationPowerMeta.textContent = light.presenceAuto
+          ? `自动感应 · ${presenceText}`
+          : "手动控制";
+        elements.workstationPowerButton.title = light.power
+          ? "关闭台灯"
+          : "开启台灯";
+        elements.workstationBrightnessButton.title =
+          `切换亮度（${light.brightnessLevels} 档循环）`;
+        elements.workstationColorButton.title =
+          `切换色温（${light.colorModeCount} 种模式循环）`;
+
+        if (busy) {
+          elements.workstationTag.textContent = "执行中";
+          elements.workstationTag.dataset.state = "waiting";
+          elements.workstationSlide.dataset.state = "waiting";
+        } else {
+          elements.workstationTag.textContent = "已连接";
+          elements.workstationTag.dataset.state = "online";
+          elements.workstationSlide.dataset.state = "online";
+        }
+      }
+
+      function renderWorkstationLight(light, deviceOffline = false) {
+        latestWorkstationLight = normalizeWorkstationLight(light);
+        updateWorkstationControls();
+
+        if (!latestWorkstationLight) {
+          elements.workstationSlide.dataset.state = deviceOffline
+            ? "offline"
+            : "waiting";
+          elements.workstationTag.textContent = deviceOffline
+            ? "设备离线"
+            : "等待设备";
+          elements.workstationTag.dataset.state = deviceOffline
+            ? "offline"
+            : "waiting";
+          setWorkstationFeedback(
+            deviceOffline
+              ? "设备连接中断，暂时无法控制台灯"
+              : "正在等待台灯状态",
+            deviceOffline ? "offline" : "waiting"
+          );
+          return;
+        }
+
+        if (!latestWorkstationLight.enabled) {
+          setWorkstationFeedback(
+            "台灯控制当前未启用",
+            "offline"
+          );
+          return;
+        }
+
+        if (!latestWorkstationLight.ready) {
+          setWorkstationFeedback(
+            "台灯控制暂不可用，请重新连接设备",
+            "offline"
+          );
+          return;
+        }
+
+        if (workstationLightBusy || latestWorkstationLight.busy) {
+          setWorkstationFeedback("正在执行台灯切换，请稍候", "waiting");
+          return;
+        }
+
+        const presenceSummary = latestWorkstationLight.presenceAuto
+          ? latestWorkstationLight.presenceKnown
+            ? latestWorkstationLight.presence
+              ? "检测到有人，自动开灯"
+              : "无人，自动关灯"
+            : "等待人体感应数据"
+          : "手动控制";
+        setWorkstationFeedback(
+          `${presenceSummary} · ` +
+          `亮度 ${latestWorkstationLight.brightnessLevels} 档循环 · ` +
+          `色温 ${latestWorkstationLight.colorModeCount} 种循环`,
+          "online"
+        );
+      }
+
+      function workstationActionSuccessMessage(action, light) {
+        switch (action) {
+          case "power_on":
+            return "台灯已开启";
+          case "power_off":
+            return "台灯已关闭";
+          case "toggle_power":
+            return light && light.power ? "台灯已开启" : "台灯已关闭";
+          case "brightness_next":
+            return "已发送亮度切换，台灯将循环切换亮度档位";
+          case "color_next":
+            return "已发送色温切换，将在冷色、暖色和冷暖混合间循环";
+          default:
+            return "台灯状态已更新";
+        }
+      }
+
+      async function executeWorkstationLightAction(action) {
+        const light = latestWorkstationLight;
+        if (workstationLightBusy ||
+            !light ||
+            !light.enabled ||
+            !light.ready) {
+          return false;
+        }
+
+        let succeeded = false;
+        let responseLight = null;
+        let finalMessage = "";
+        let finalState = "offline";
+
+        workstationLightBusy = true;
+        updateWorkstationControls();
+        setWorkstationFeedback("正在执行台灯切换…", "waiting");
+
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(
+          () => controller.abort(),
+          REQUEST_TIMEOUT_MS
+        );
+
+        try {
+          const response = await fetch("/api/v1/workstation/light", {
+            method: "POST",
+            cache: "no-store",
+            headers: {
+              "Accept": "application/json",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ action }),
+            signal: controller.signal
+          });
+          const payload = await readJsonPayload(response);
+          if (!response.ok) {
+            throw new Error(apiErrorMessage(payload, `HTTP ${response.status}`));
+          }
+
+          responseLight = normalizeWorkstationLight(
+            payload && payload.workstation && payload.workstation.light
+          );
+          if (!responseLight) {
+            throw new Error("设备未返回台灯状态");
+          }
+          finalMessage = workstationActionSuccessMessage(action, responseLight);
+          finalState = "online";
+          succeeded = true;
+        } catch (error) {
+          finalMessage = error && error.name === "AbortError"
+            ? "台灯切换超时，请稍后重试"
+            : error && error.message
+              ? error.message
+              : "无法执行台灯切换";
+          finalState = "offline";
+        } finally {
+          window.clearTimeout(timeoutId);
+          workstationLightBusy = false;
+        }
+
+        if (succeeded) {
+          renderWorkstationLight(responseLight);
+        } else {
+          updateWorkstationControls();
+        }
+        setWorkstationFeedback(finalMessage, finalState);
+        announce(finalMessage);
+        return succeeded;
       }
 
       function normalizeWebPageSettings(pages) {
@@ -12535,7 +13096,7 @@
           "离线",
           "当前坐姿计时",
           "设备数据不可用",
-          "请检查热点连接后刷新",
+          "请确认设备连接后刷新",
           "设备重新连接后会自动恢复监测"
         );
         elements.wellnessDuration.textContent = "--:--:--";
@@ -12547,7 +13108,7 @@
           elements.temperatureValue,
           elements.temperatureMeta,
           "--",
-          "SHT30 状态未知",
+          "环境数据暂不可用",
           "offline"
         );
         setSensorCard(
@@ -12555,7 +13116,7 @@
           elements.humidityValue,
           elements.humidityMeta,
           "--",
-          "SHT30 状态未知",
+          "环境数据暂不可用",
           "offline"
         );
         setSensorCard(
@@ -12563,7 +13124,7 @@
           elements.pirState,
           elements.pirMeta,
           "--",
-          "PIR 状态未知",
+          "人体感应暂不可用",
           "offline"
         );
         setPresenceStatus("offline", "感知离线");
@@ -12572,16 +13133,16 @@
           elements.oledState,
           elements.oledMeta,
           "--",
-          "OLED 状态未知",
+          "显示屏状态暂不可用",
           "offline"
         );
-        elements.sensorUpdatedAt.textContent = "同步中断";
-        elements.careTag.textContent = "状态未知";
+        elements.sensorUpdatedAt.textContent = "暂时无法更新";
+        elements.careTag.textContent = "暂时离线";
         elements.careTag.dataset.state = "offline";
         elements.careFocus.dataset.level = "3";
         elements.careKicker.textContent = "主动关怀暂时中断";
         elements.careTitle.textContent = "无法读取今日关怀数据";
-        elements.careMessage.textContent = "请检查手机是否仍连接 WeMosR32 热点。";
+        elements.careMessage.textContent = "请确认仍连接工位设备，然后刷新页面。";
         elements.todaySitting.textContent = "--";
         elements.longestSitting.textContent = "--";
         elements.completedBreaksDaily.textContent = "--";
@@ -12593,6 +13154,7 @@
         elements.careSettingsState.textContent = "设备离线";
         elements.careSettingsState.dataset.state = "offline";
         renderWaterState(null);
+        renderWorkstationLight(null);
       }
 
       function renderWellness(wellness) {
@@ -12617,7 +13179,7 @@
             elements.temperatureValue,
             elements.temperatureMeta,
             "--",
-            "SHT30 未启用",
+            "环境监测未启用",
             "offline"
           );
           setSensorCard(
@@ -12625,7 +13187,7 @@
             elements.humidityValue,
             elements.humidityMeta,
             "--",
-            "SHT30 未启用",
+            "环境监测未启用",
             "offline"
           );
           setSensorCard(
@@ -12633,7 +13195,7 @@
             elements.pirState,
             elements.pirMeta,
             "--",
-            "PIR 未启用",
+            "人体感应未启用",
             "idle"
           );
         setPresenceStatus("idle", "感知未启用");
@@ -12642,7 +13204,7 @@
             elements.oledState,
             elements.oledMeta,
             "--",
-            "OLED 未启用",
+            "显示屏未启用",
             "offline"
           );
           elements.careTag.textContent = "传感器未启用";
@@ -12651,7 +13213,7 @@
           elements.careKicker.textContent = "主动关怀尚未启动";
           elements.careTitle.textContent = "传感器监控未启用";
           elements.careMessage.textContent =
-            "启用 PIR 后，设备才能判断久坐、离席和活动状态。";
+            "启用人体感应后，设备才能判断久坐、离席和活动状态。";
           elements.todaySitting.textContent = "0 分钟";
           elements.longestSitting.textContent = "0 分钟";
           elements.completedBreaksDaily.textContent = "0";
@@ -12670,7 +13232,7 @@
           setPresenceStatus("offline", "感知不可用");
           elements.wellnessTag.textContent = "启动失败";
           elements.wellnessStatus.textContent = "传感器任务未运行";
-          elements.wellnessNext.textContent = "请查看设备日志确认传感器初始化结果";
+          elements.wellnessNext.textContent = "人体感应暂不可用，请重新连接设备";
           return;
         }
 
@@ -12705,7 +13267,7 @@
           ? formatAge(sht30.age_ms)
           : shtValid
             ? `数据已过期 · ${formatAge(sht30.age_ms)}`
-            : "SHT30 未返回有效数据";
+            : "环境数据暂不可用";
         setSensorCard(
           elements.temperatureCard,
           elements.temperatureValue,
@@ -12746,13 +13308,12 @@
           pirMotion ? "正在活动" : presenceDetected ? "有人在场" : "环境安静"
         );
 
-        const address = formatHexAddress(oled.address);
         setSensorCard(
           elements.displayCard,
           elements.oledState,
           elements.oledMeta,
-          oledReady ? "显示就绪" : "显示离线",
-          oledReady ? `${address} · 128 × 64` : "SSD1306 未响应",
+          oledReady ? "屏幕工作正常" : "屏幕暂未连接",
+          oledReady ? "状态显示正常" : "请重新连接设备后查看",
           oledReady ? "online" : "offline"
         );
 
@@ -13228,7 +13789,7 @@
           announce(count > 0 ? `扫描完成，发现 ${count} 个网络` : "扫描完成，未发现网络");
         } catch (error) {
           const message = error && error.name === "AbortError"
-            ? "扫描超时，请保持热点连接后重试"
+            ? "扫描超时，请保持工位设备连接后重试"
             : error && error.message
               ? error.message
               : "扫描失败，请稍后重试";
@@ -13635,7 +14196,7 @@
         window.requestAnimationFrame(() => {
           elements.deviceInfoCloseButton.focus();
         });
-        announce("已打开设备与网络");
+        announce("已打开连接与设备");
       }
 
       function handleDeviceInfoDialogClosed() {
@@ -14566,22 +15127,23 @@
         updateDeviceClock();
         elements.systemPanel.dataset.state = "offline";
         elements.statusTitle.textContent = "暂时无法读取设备";
-        elements.statusDescription.textContent = "请确认手机仍连接 WeMosR32 热点，然后重新刷新。";
+        elements.statusDescription.textContent = "请确认仍连接工位设备，然后重新刷新。";
         elements.networkTag.textContent = "连接中断";
         elements.networkTag.dataset.state = "offline";
         elements.deviceState.textContent = "连接中断";
         elements.currentStationSsid.textContent = "--";
         elements.currentStationIp.textContent = "--";
         elements.currentStationRssi.textContent = "--";
-        elements.wifiSaveState.textContent = "状态未知";
+        elements.wifiSaveState.textContent = "暂不可用";
         elements.wifiSaveState.dataset.state = "offline";
-        elements.stationState.textContent = "状态未知";
+        elements.stationState.textContent = "暂不可用";
         elements.stationState.dataset.state = "offline";
         if (!wifiConnecting && !wifiScanning) {
           setWifiFeedback("无法读取设备网络状态", "offline");
         }
         renderLedState(null);
         renderWeather(latestWeather, true);
+        renderWorkstationLight(null, true);
         elements.pageFooter.dataset.state = "offline";
         elements.lastUpdated.textContent = "状态更新失败";
         setUnavailableState();
@@ -14598,7 +15160,7 @@
       function renderStatus(data) {
         const clients = Math.max(0, Number(data.wifi.ap_clients) || 0);
         const softApIp = data.network.softap_ip || "192.168.4.1";
-        const softApSsid = data.network.softap_ssid || data.device || "WeMosR32";
+        const softApSsid = data.network.softap_ssid || data.device || "工位设备";
         const mode = data.wifi.mode || "SoftAP";
 
         snapshot = {
@@ -14608,11 +15170,11 @@
         syncedAt = Date.now();
         renderDeviceClockState(data.time);
 
-        elements.deviceName.textContent = data.device;
-        elements.statusTitle.textContent = "设备运行正常";
+        elements.deviceName.textContent = "智能工位";
+        elements.statusTitle.textContent = "工位设备已连接";
         elements.statusDescription.textContent = clients > 0
-          ? `本地热点在线，当前有 ${clients} 台设备接入。`
-          : "本地热点在线，等待手机或其他设备接入。";
+          ? "连接正常，可以继续设置网络或查看高级信息。"
+          : "连接正常，正在等待其他设备接入。";
         elements.wifiMode.textContent = mode;
         elements.softApIp.textContent = softApIp;
         elements.clientCount.textContent = formatClients(clients);
@@ -14621,16 +15183,18 @@
         elements.softApSsid.textContent = softApSsid;
         renderWifiStatus(data.wifi);
         elements.deviceState.textContent = "运行正常";
-        elements.networkTag.textContent = clients > 0 ? "热点在线" : "等待接入";
+        elements.networkTag.textContent = clients > 0 ? "连接正常" : "待连接";
         elements.networkTag.dataset.state = clients > 0 ? "online" : "waiting";
         elements.systemPanel.dataset.state = "online";
         elements.pageFooter.dataset.state = "online";
         elements.lastUpdated.textContent = `更新于 ${formatTime(new Date(syncedAt))}`;
-        elements.deviceAddress.textContent = softApIp;
 
         renderWellness(data.wellness);
         renderCare(data.wellness && data.wellness.care);
         renderWeather(data.weather);
+        renderWorkstationLight(
+          data.workstation && data.workstation.light
+        );
         const reportedWebPageSettings = normalizeWebPageSettings(
           data.web && data.web.pages
         );
@@ -14736,7 +15300,7 @@
           if (shouldAnnounce) {
             announce(succeeded
               ? "设备状态已刷新"
-              : "刷新失败，请检查热点连接");
+              : "刷新失败，请检查工位设备连接");
           }
         }
       }
@@ -14899,6 +15463,15 @@
         const cupMl = Number(latestCareSettings && latestCareSettings.cup_ml) ||
           250;
         handleWaterAdjustment(-cupMl);
+      });
+      elements.workstationPowerButton.addEventListener("click", () => {
+        executeWorkstationLightAction("toggle_power");
+      });
+      elements.workstationBrightnessButton.addEventListener("click", () => {
+        executeWorkstationLightAction("brightness_next");
+      });
+      elements.workstationColorButton.addEventListener("click", () => {
+        executeWorkstationLightAction("color_next");
       });
 
       elements.wifiForm.addEventListener("submit", handleWifiSubmit);

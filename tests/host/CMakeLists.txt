@@ -67,6 +67,27 @@ endif()
 
 add_test(NAME pir_service_test COMMAND pir_service_test)
 
+add_executable(button_service_test
+    button_service_test.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor/button_service.c
+)
+
+target_include_directories(button_service_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor
+)
+
+target_compile_features(button_service_test PRIVATE c_std_11)
+
+if(MSVC)
+    target_compile_options(button_service_test PRIVATE /W4 /WX)
+else()
+    target_compile_options(button_service_test PRIVATE
+        -Wall -Wextra -Werror -pedantic
+    )
+endif()
+
+add_test(NAME button_service_test COMMAND button_service_test)
+
 add_executable(care_coordinator_test
     care_coordinator_test.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../../components/wellness_monitor/care_coordinator.c

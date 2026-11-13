@@ -18,13 +18,13 @@ typedef enum {
 
 typedef enum {
     FEEDBACK_SCENE_NONE = 0,
-    /* Buzzer: 2x120 ms; vibration: 2x220 ms. */
+    /* Buzzer: 2x120 ms; vibration: 2x700 ms. */
     FEEDBACK_SCENE_WATER_REMINDER,
-    /* Buzzer: 2x160 ms; vibration: 2x300 ms. */
+    /* Buzzer: 2x160 ms; vibration: 3x800 ms. */
     FEEDBACK_SCENE_SEDENTARY_ALERT,
-    /* Buzzer: 3x160 ms; vibration: 3x350 ms. */
+    /* Buzzer: 3x160 ms; vibration: 4x900 ms. */
     FEEDBACK_SCENE_SEDENTARY_ESCALATED,
-    /* Buzzer: 1x80 ms; vibration: 1x100 ms. */
+    /* Buzzer: 1x80 ms; vibration: 1x300 ms. */
     FEEDBACK_SCENE_CONFIRM,
 } feedback_scene_t;
 

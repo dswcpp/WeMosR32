@@ -14,6 +14,7 @@ idf_component_register(
         weather_service
         wellness_monitor
         wifi_manager
+        workstation_light
     EMBED_FILES
         "www/manifest.webmanifest"
         "www/icon.svg"

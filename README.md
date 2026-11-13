@@ -16,6 +16,7 @@ components/time_service/    RTC clock, timezone, and SNTP synchronization
 components/weather_service/ Open-Meteo outdoor weather, cache, and refresh task
 components/wellness_monitor/ Wellness sensors, reminders, and care settings
 components/rgb_indicator/   Common-cathode RGB lighting and status effects
+components/workstation_light/ Desk lamp relay controller for three relay inputs
 components/http_api/        Embedded mobile dashboard and JSON status endpoint
 docs/                       Architecture and development notes
 include/                    Reserved for project-wide public headers
@@ -79,6 +80,7 @@ Configuration is available under `WeMos R32 application`. After startup:
 - Wi-Fi scan API: `http://192.168.4.1/api/v1/wifi/scan`
 - Wi-Fi configuration API: `http://192.168.4.1/api/v1/wifi`
 - RGB lighting API: `http://192.168.4.1/api/v1/led`
+- Workstation light API: `http://192.168.4.1/api/v1/workstation/light`
 - Web app manifest: `http://192.168.4.1/manifest.webmanifest`
 
 If a local `wifi.ini` exists in the project root, it is embedded at build time
@@ -193,7 +195,7 @@ works normally.
 
 ## Web dashboard cards
 
-The care settings dialog can show or hide each of the seven dashboard cards.
+The care settings dialog can show or hide each of the eight dashboard cards.
 The current selection is exposed at `web.pages` in `/api/v1/status` and is
 persisted as a versioned blob under `web_cfg/pages`:
 
@@ -204,6 +206,7 @@ persisted as a versioned blob under `web_cfg/pages`:
 - `presence`
 - `today_care`
 - `weather`
+- `workstation`
 
 Save a complete page selection with:
 
@@ -219,12 +222,13 @@ Content-Type: application/json
     "water": true,
     "presence": false,
     "today_care": true,
-    "weather": true
+    "weather": true,
+    "workstation": true
   }
 }
 ```
 
-All seven booleans are required, and at least one card must remain enabled.
+All eight booleans are required, and at least one card must remain enabled.
 After saving, the dashboard applies the new layout immediately; a reboot keeps
 the saved selection.
 
@@ -234,6 +238,124 @@ size budget before it is embedded in the firmware. The uncompressed copy is
 not stored on the device. Card settings are generated from one `WEB_PAGES`
 metadata table, so adding or reordering a card does not require duplicating
 settings switches and carousel controls in the markup.
+
+## Workstation desk light
+
+The workstation controller uses the first three inputs of a four-channel relay
+module. The fourth relay input is intentionally not configured.
+
+| Function | ESP32 GPIO | Relay behavior |
+| --- | --- | --- |
+| Lamp power | `GPIO13` | 180 ms pulse connected to relay `IN1` |
+| Brightness | `GPIO14` | 180 ms pulse connected to relay `IN2` |
+| Color temperature | `GPIO23` | 180 ms pulse connected to relay `IN3` |
+| Presence input | `GPIO27` | Existing PIR input from the wellness monitor |
+| Onboard status LED | `GPIO2` | Active-high red software LED mirrors PIR presence |
+| Fourth channel | Not assigned | Unused |
+
+All three relay contacts are momentary and are wired in parallel with the lamp
+panel's low-voltage power, brightness, and color-temperature buttons. Relay 1
+presses the power button once to change the lamp's on/off state. Presence
+automation is enabled by default: when presence starts, relay 1 pulses once;
+after the PIR presence hold expires, relay 1 pulses again. The wellness monitor
+holds presence for 120 seconds after the last detected motion. One pulse on
+relay 2 advances brightness through four levels, and one pulse on relay 3 cycles
+through cool, warm, and mixed modes. The module defaults to active-low inputs, a
+180 ms pulse, and a 160 ms release gap; all values are configurable under
+`WeMos R32 application`.
+
+The black Wemos D1 R32 board has two visible LEDs. The blue power LED lights
+whenever 3.3 V is present and cannot be controlled by firmware. The red
+software-controlled LED is connected to `GPIO2` and is active high. It turns on
+while the PIR reports presence and turns off when the 120-second presence hold
+expires. This indicator is independent of the lamp-power automation; it can
+remain enabled when automatic relay switching is disabled. Clone boards can
+swap the LED colors or polarity, so verify the hardware or change the GPIO and
+polarity under `WeMos R32 application`.
+
+```http
+POST /api/v1/workstation/light
+Content-Type: application/json
+
+{"action":"brightness_next"}
+```
+
+Supported actions are `power_on`, `power_off`, `toggle_power`,
+`brightness_next`, and `color_next`. The status response exposes the controller
+at `workstation.light`. It reports relay power, readiness, cycle counters, pulse
+timing, presence automation state, the last action source, and the last action.
+It does not report a current brightness level or color mode because the relay
+interface receives no position feedback from the lamp panel; only the physical
+button-cycle count is known. The reported power value is the controller's
+assumed lamp state, not measured electrical feedback. Operating the lamp's
+physical panel buttons can therefore make that value differ from the real lamp
+state. The controller releases all three relays during initialization, then
+presence automation may immediately pulse relay 1 if the PIR already reports
+presence. Manual actions remain available, but automation does not continuously
+override a manual change until the presence state changes again.
+
+Electrical safety is mandatory:
+
+- Never connect mains voltage directly to an ESP32 GPIO. Use a relay module
+  rated for the load, with suitable isolation, terminal spacing, and enclosure.
+- Tap the lamp panel buttons only on their low-voltage control side. Confirm
+  the panel's button topology before wiring relay contacts across it.
+- Check whether the relay board is opto-isolated. Follow its documented input
+  and ground wiring; non-isolated modules require a common ground with the
+  ESP32. ESP32 GPIOs are not 5 V tolerant.
+- Fit pull-ups on active-low relay inputs when the module does not already
+  provide them, so the relays remain released during ESP32 reset and boot.
+- Use the normally-open contacts and verify that every relay is released before
+  energizing the lamp.
+
+## Integrated button panel and OLED
+
+The 1.3-inch OLED and four-key panel are independent from the desk-lamp panel.
+The keys configure wellness, reminder, and display behavior; they do not
+replace or duplicate the lamp's power, brightness, or color controls.
+
+| Key | Function | ESP32 GPIO | Pull-up |
+| --- | --- | --- | --- |
+| `K1` | Acknowledge feedback | `GPIO32` | Internal |
+| `K2` | Add or remove one cup of water | `GPIO33` | Internal |
+| `K3` | Temporary mute or alert mode | `GPIO34` | External 10 kOhm required |
+| `K4` | OLED page selection | `GPIO35` | External 10 kOhm required |
+
+All keys are active low. Connect one side of each key to the matching GPIO and
+the other side to GND. `GPIO34` and `GPIO35` are input-only pins without an
+internal pull-up on ESP32, so each needs an external `10 kOhm` resistor to
+`3.3 V`. The integrated key board may already include these resistors; verify
+it before adding duplicates. Do not connect any key to a voltage above 3.3 V.
+
+The default debounce interval is 25 ms, and a key held for at least 1.5 seconds
+is classified as a long press when released:
+
+- `K1`: short press stops the current buzzer and vibration alert. Long press is
+  currently unassigned.
+- `K2`: short press adds the configured `cup_ml` to today's water total. Long
+  press removes one cup and never reduces the total below zero.
+- `K3`: short press toggles a 30-minute temporary mute. Long press cycles the
+  persistent alert mode through `both -> vibrate -> sound -> silent`.
+- `K4`: short press cycles the manual OLED pages through care, water,
+  environment, and weather. Long press restores the automatic care/weather
+  carousel.
+
+The OLED uses an inverted page header, one primary value, a short action line,
+and a context-sensitive key strip. It does not expose raw PIR values, sensor
+online state, or weather fetch timestamps. The key strip shows only the two or
+three actions relevant to the current page; on-screen numbers `1` through `4`
+correspond to `K1` through `K4`. A hint is highlighted when feedback is active,
+water is due, temporary or persistent mute is active, or the display is on a
+manually selected page.
+
+The 1.3-inch display defaults to the `SH1106` controller. The firmware uses the
+SH1106 132-column RAM layout with the required two-column offset, probes I2C
+addresses `0x3C` and `0x3D`, and keeps the existing `SDA=GPIO21`,
+`SCL=GPIO22` wiring. Select `SSD1306 or SSD1315 compatible` under
+`WeMos R32 application` if the module documentation identifies another
+controller. A uniform two-column shift or clipping usually indicates a
+controller-selection mismatch; a completely blank display can also indicate
+wiring, address, or power problems.
 
 ## Alert outputs
 
@@ -268,15 +390,16 @@ scene into actuator-specific pulse patterns and the selected alert mode.
 
 | Scene | Active buzzer | Buzzer window | Vibration motor | Motor window |
 | --- | --- | --- | --- | --- |
-| Water reminder | 2 x 120 ms, 200 ms gap | 440 ms | 2 x 220 ms, 180 ms gap | 620 ms |
-| First sedentary alert | 2 x 160 ms, 220 ms gap | 540 ms | 2 x 300 ms, 200 ms gap | 800 ms |
-| Escalated sedentary alert | 3 x 160 ms, 180 ms gap | 840 ms | 3 x 350 ms, 180 ms gap | 1410 ms |
-| Confirmation | 1 x 80 ms | 80 ms | 1 x 100 ms | 100 ms |
+| Water reminder | 2 x 120 ms, 200 ms gap | 440 ms | 2 x 700 ms, 250 ms gap | 1650 ms |
+| First sedentary alert | 2 x 160 ms, 220 ms gap | 540 ms | 3 x 800 ms, 250 ms gap | 2900 ms |
+| Escalated sedentary alert | 3 x 160 ms, 180 ms gap | 840 ms | 4 x 900 ms, 250 ms gap | 4350 ms |
+| Confirmation | 1 x 80 ms | 80 ms | 1 x 300 ms | 300 ms |
 
-No vibration pulse is longer than 350 ms. Repeating short pulses makes the
-alert noticeable without holding the motor on continuously, which reduces
-heat and avoids a long, startling buzz. The existing `both`, `vibrate`,
-`sound`, and `silent` settings apply to every scene.
+No vibration pulse is longer than 900 ms. The longer pulses allow a small
+ERM motor to reach noticeable speed, while the 250 ms gaps let it stop and
+rest between bursts. This reduces heat and avoids holding the motor on
+continuously. The existing `both`, `vibrate`, `sound`, and `silent` settings
+apply to every scene.
 
 ## RGB indicator
 
@@ -286,8 +409,8 @@ channels:
 
 | RGB module | ESP32 |
 | --- | --- |
-| `R` | `GPIO32` |
-| `G` | `GPIO33` |
+| `R` | `GPIO4` |
+| `G` | `GPIO19` |
 | `B` | `GPIO18` |
 | `GND` | Common ground |
 

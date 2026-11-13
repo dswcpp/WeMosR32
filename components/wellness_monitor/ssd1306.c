@@ -23,6 +23,7 @@ static i2c_master_bus_handle_t s_bus;
 static i2c_master_dev_handle_t s_device;
 static uint8_t s_address;
 static bool s_ready;
+static bool s_sh1106;
 
 static const uint8_t
     s_font[SSD1306_FONT_LAST - SSD1306_FONT_FIRST + 1]
@@ -135,8 +136,10 @@ static esp_err_t initialize_panel(uint32_t clock_hz)
         0x40,       /* start line 0 */
         0x8D, 0x14, /* charge pump enabled */
     };
+    static const uint8_t ssd1306_page_addressing[] = {
+        0x20, 0x02,
+    };
     static const uint8_t finish[] = {
-        0x20, 0x02, /* page addressing */
         0xA1,       /* segment remap */
         0xC8,       /* COM scan direction */
         0xDA, 0x12, /* COM pins */
@@ -172,6 +175,13 @@ static esp_err_t initialize_panel(uint32_t clock_hz)
     if (err != ESP_OK) {
         return err;
     }
+    if (!s_sh1106) {
+        err = write_commands(ssd1306_page_addressing,
+                             sizeof(ssd1306_page_addressing));
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
     vTaskDelay(pdMS_TO_TICKS(100));
     err = write_commands(finish, sizeof(finish));
     if (err != ESP_OK) {
@@ -185,7 +195,14 @@ static esp_err_t initialize_panel(uint32_t clock_hz)
 
 esp_err_t ssd1306_init(const ssd1306_config_t *config)
 {
-    const i2c_master_bus_config_t bus_config = {
+    i2c_master_bus_config_t bus_config;
+    esp_err_t err;
+
+    if (config == NULL || config->i2c_port < 0 ||
+        config->i2c_port > 1 || config->clock_hz == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    bus_config = (i2c_master_bus_config_t){
         .i2c_port = (i2c_port_num_t)config->i2c_port,
         .sda_io_num = (gpio_num_t)config->sda_gpio,
         .scl_io_num = (gpio_num_t)config->scl_gpio,
@@ -196,13 +213,8 @@ esp_err_t ssd1306_init(const ssd1306_config_t *config)
         .flags.enable_internal_pullup = true,
         .flags.allow_pd = false,
     };
-    esp_err_t err;
 
-    if (config == NULL || config->i2c_port < 0 ||
-        config->i2c_port > 1 || config->clock_hz == 0u) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
+    s_sh1106 = config->sh1106;
     release_device();
     if (s_bus == NULL) {
         ESP_LOGI(SSD1306_TAG,
@@ -230,6 +242,11 @@ bool ssd1306_is_ready(void)
 uint8_t ssd1306_address(void)
 {
     return s_ready ? s_address : 0u;
+}
+
+const char *ssd1306_controller_name(void)
+{
+    return s_sh1106 ? "sh1106" : "ssd1306";
 }
 
 void ssd1306_clear(void)
@@ -339,6 +356,7 @@ void ssd1306_draw_text(int x, int y, const char *text, bool color)
 esp_err_t ssd1306_flush(void)
 {
     uint8_t page;
+    const uint8_t column_offset = s_sh1106 ? 2u : 0u;
 
     if (!s_ready) {
         return ESP_ERR_INVALID_STATE;
@@ -347,8 +365,8 @@ esp_err_t ssd1306_flush(void)
     for (page = 0u; page < SSD1306_PAGE_COUNT; page++) {
         const uint8_t position[3] = {
             (uint8_t)(0xB0u | page),
-            0x00u,
-            0x10u,
+            (uint8_t)(column_offset & 0x0Fu),
+            (uint8_t)(0x10u | (column_offset >> 4u)),
         };
         esp_err_t err = write_commands(position, sizeof(position));
 
